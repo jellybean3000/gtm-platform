@@ -1,6 +1,7 @@
 import { BaseAgent, AgentConfig } from "./base-agent";
 import { MarketResearchAgent } from "./market-research";
 import { PMFAgent } from "./pmf";
+import { PositioningAgent } from "./positioning";
 
 /**
  * Factory function that returns the correct agent subclass based on slug.
@@ -12,6 +13,8 @@ export function createAgent(slug: string, config: AgentConfig): BaseAgent {
       return new MarketResearchAgent(config);
     case "pmf":
       return new PMFAgent(config);
+    case "positioning":
+      return new PositioningAgent(config);
     default:
       return new BaseAgent(config);
   }

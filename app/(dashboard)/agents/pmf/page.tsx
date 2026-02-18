@@ -778,7 +778,7 @@ function StructuredResults({ data }: { data: StructuredOutput }) {
                       key={i}
                       className="text-xs px-3 py-1 rounded-full border border-border-default text-text-body"
                     >
-                      {typeof t === "string" ? t : (t as Record<string, unknown>).theme || (t as Record<string, unknown>).name || JSON.stringify(t)}
+                      {typeof t === "string" ? t : String((t as Record<string, unknown>).theme || (t as Record<string, unknown>).name || JSON.stringify(t))}
                     </span>
                   ))}
                 </div>
@@ -793,7 +793,7 @@ function StructuredResults({ data }: { data: StructuredOutput }) {
                 <ul className="space-y-1">
                   {data.insight_report.patterns.map((p, i) => (
                     <li key={i} className="text-xs text-text-body">
-                      - {typeof p === "string" ? p : (p as Record<string, unknown>).pattern || (p as Record<string, unknown>).description || JSON.stringify(p)}
+                      - {typeof p === "string" ? p : String((p as Record<string, unknown>).pattern || (p as Record<string, unknown>).description || JSON.stringify(p))}
                     </li>
                   ))}
                 </ul>
@@ -808,7 +808,7 @@ function StructuredResults({ data }: { data: StructuredOutput }) {
                 <ul className="space-y-1">
                   {data.insight_report.gaps.map((g, i) => (
                     <li key={i} className="text-xs text-[#F59E0B]">
-                      - {typeof g === "string" ? g : (g as Record<string, unknown>).gap || (g as Record<string, unknown>).description || JSON.stringify(g)}
+                      - {typeof g === "string" ? g : String((g as Record<string, unknown>).gap || (g as Record<string, unknown>).description || JSON.stringify(g))}
                     </li>
                   ))}
                 </ul>
