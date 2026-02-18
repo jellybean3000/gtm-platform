@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { agents } from "@/lib/db/schema";
-import { BaseAgent } from "@/lib/agents/base-agent";
+import { createAgent } from "@/lib/agents";
 
 export async function POST(
   request: NextRequest,
@@ -44,7 +44,7 @@ export async function POST(
   }
 
   try {
-    const baseAgent = new BaseAgent({
+    const agentInstance = createAgent(agent.slug, {
       agentId: agent.id,
       slug: agent.slug,
       name: agent.name,
@@ -54,7 +54,7 @@ export async function POST(
       teamId,
     });
 
-    const { stream } = await baseAgent.streamRun(input, orchestrationId);
+    const { stream } = await agentInstance.streamRun(input, orchestrationId);
 
     return stream.toTextStreamResponse();
   } catch (error) {
