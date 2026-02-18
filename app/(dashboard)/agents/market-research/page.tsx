@@ -73,6 +73,18 @@ interface RunHistory {
   completedAt: string | null;
 }
 
+interface KnowledgeSource {
+  id: string;
+  content: string;
+  sourceDocument: string;
+  sourceUrl: string | null;
+}
+
+type ProgressStep = {
+  label: string;
+  status: "pending" | "active" | "done";
+};
+
 // ---------------------------------------------------------------------------
 // Main Page
 // ---------------------------------------------------------------------------
@@ -86,6 +98,12 @@ export default function MarketResearchPage() {
   const [streamedText, setStreamedText] = useState("");
   const [structured, setStructured] = useState<StructuredOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [sources, setSources] = useState<KnowledgeSource[]>([]);
+  const [savedToKB, setSavedToKB] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
 
   const [runs, setRuns] = useState<RunHistory[]>([]);
   const outputRef = useRef<HTMLDivElement>(null);
@@ -116,6 +134,41 @@ export default function MarketResearchPage() {
     }
   }, [streamedText]);
 
+  // Fetch sources after run completes
+  async function fetchSources(runId: string) {
+    try {
+      const res = await fetch(`/api/agents/market-research/runs/${runId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSources(data.sources || []);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function initProgressSteps() {
+    setProgressSteps([
+      { label: "Querying knowledge base", status: "active" },
+      { label: "Analyzing market & competitors", status: "pending" },
+      { label: "Generating structured report", status: "pending" },
+    ]);
+  }
+
+  function advanceProgress(stepIndex: number) {
+    setProgressSteps((prev) =>
+      prev.map((step, i) => {
+        if (i < stepIndex) return { ...step, status: "done" };
+        if (i === stepIndex) return { ...step, status: "active" };
+        return step;
+      })
+    );
+  }
+
+  function completeAllProgress() {
+    setProgressSteps((prev) => prev.map((s) => ({ ...s, status: "done" })));
+  }
+
   async function handleRun() {
     if (!productDescription.trim()) return;
 
@@ -123,6 +176,10 @@ export default function MarketResearchPage() {
     setStreamedText("");
     setStructured(null);
     setError(null);
+    setCurrentRunId(null);
+    setSources([]);
+    setSavedToKB(false);
+    initProgressSteps();
 
     try {
       const res = await fetch("/api/agents/market-research", {
@@ -150,9 +207,17 @@ export default function MarketResearchPage() {
         throw new Error("No response body");
       }
 
+      // Capture runId from header
+      const runId = res.headers.get("X-Run-Id");
+      if (runId) setCurrentRunId(runId);
+
+      // Knowledge base queried before streaming starts — mark step 1 done
+      advanceProgress(1);
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
+      let advancedToStep2 = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -160,20 +225,58 @@ export default function MarketResearchPage() {
         const chunk = decoder.decode(value, { stream: true });
         fullText += chunk;
         setStreamedText(fullText);
+
+        // Advance to step 3 when we see the JSON output starting
+        if (!advancedToStep2 && fullText.length > 200) {
+          advancedToStep2 = true;
+          advanceProgress(2);
+        }
       }
+
+      completeAllProgress();
 
       // Try to parse structured JSON from the response
       tryParseStructured(fullText);
       fetchRuns();
+
+      // Fetch knowledge sources used
+      if (runId) {
+        fetchSources(runId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Agent failed");
+      setProgressSteps([]);
     } finally {
       setIsRunning(false);
     }
   }
 
+  async function handleSaveToKnowledge() {
+    if (!streamedText || isSaving) return;
+
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/agents/market-research/save-to-knowledge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamId: TEAM_ID,
+          runId: currentRunId,
+          title: `Market Research: ${productDescription.slice(0, 60)}`,
+          content: streamedText,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save");
+      setSavedToKB(true);
+    } catch {
+      setError("Failed to save to knowledge base");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   function tryParseStructured(text: string) {
-    // Look for JSON code block
     const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
     if (jsonMatch) {
       try {
@@ -185,7 +288,6 @@ export default function MarketResearchPage() {
       }
     }
 
-    // Try parsing the whole text as JSON
     try {
       const parsed = JSON.parse(text);
       setStructured(parsed);
@@ -279,10 +381,55 @@ export default function MarketResearchPage() {
         </button>
       </div>
 
-      {/* Error */}
+      {/* Error with Retry */}
       {error && (
-        <div className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-card p-4">
-          <p className="text-[#EF4444] text-sm">{error}</p>
+        <div className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-card p-4 flex items-center justify-between">
+          <div>
+            <p className="text-[#EF4444] text-sm font-medium">Analysis Failed</p>
+            <p className="text-[#EF4444]/70 text-xs mt-1">{error}</p>
+          </div>
+          <button
+            onClick={handleRun}
+            disabled={isRunning || !productDescription.trim()}
+            className="px-4 py-2 text-xs font-medium rounded-lg border border-[#EF4444]/30 text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors disabled:opacity-50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Progress Indicator */}
+      {isRunning && progressSteps.length > 0 && (
+        <div className="bg-card-bg border border-border-default rounded-card p-4">
+          <div className="flex items-center gap-6">
+            {progressSteps.map((step, i) => (
+              <div key={i} className="flex items-center gap-2">
+                {step.status === "done" ? (
+                  <svg className="w-4 h-4 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : step.status === "active" ? (
+                  <div
+                    className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                    style={{ borderColor: `${ACCENT} transparent ${ACCENT} ${ACCENT}` }}
+                  />
+                ) : (
+                  <div className="w-4 h-4 rounded-full border-2 border-border-default" />
+                )}
+                <span
+                  className={`text-xs ${
+                    step.status === "active"
+                      ? "text-text-heading font-medium"
+                      : step.status === "done"
+                        ? "text-[#10B981]"
+                        : "text-text-dim"
+                  }`}
+                >
+                  {step.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -308,7 +455,41 @@ export default function MarketResearchPage() {
       )}
 
       {/* Structured Results */}
-      {structured && <StructuredResults data={structured} />}
+      {structured && (
+        <>
+          <StructuredResults data={structured} />
+
+          {/* Save to Knowledge Base */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSaveToKnowledge}
+              disabled={isSaving || savedToKB}
+              className="px-5 py-2.5 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                borderColor: savedToKB ? "#10B981" : `${ACCENT}40`,
+                color: savedToKB ? "#10B981" : ACCENT,
+                backgroundColor: savedToKB ? "rgba(16,185,129,0.1)" : "transparent",
+              }}
+            >
+              {savedToKB
+                ? "Saved to Knowledge Base"
+                : isSaving
+                  ? "Saving..."
+                  : "Save to Knowledge Base"}
+            </button>
+            {savedToKB && (
+              <span className="text-xs text-[#10B981]">
+                Other agents can now reference this research.
+              </span>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Sources Used */}
+      {sources.length > 0 && (
+        <SourcesSection sources={sources} />
+      )}
 
       {/* Run History */}
       <RunHistorySection runs={runs} />
@@ -317,20 +498,57 @@ export default function MarketResearchPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Structured Results
+// Collapsible Section Wrapper
+// ---------------------------------------------------------------------------
+function CollapsibleSection({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="bg-card-bg border border-border-default rounded-card overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-6 pb-0 hover:bg-white/[0.01] transition-colors"
+        style={{ paddingBottom: isOpen ? 0 : "1.5rem" }}
+      >
+        <h3
+          className="text-[10px] uppercase tracking-[2px]"
+          style={{ color: ACCENT }}
+        >
+          {title}
+        </h3>
+        <svg
+          className="w-4 h-4 text-text-muted transition-transform duration-200"
+          style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isOpen && <div className="p-6 pt-4">{children}</div>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Structured Results (with collapsible sections)
 // ---------------------------------------------------------------------------
 function StructuredResults({ data }: { data: StructuredOutput }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Market Sizing */}
       {data.market_sizing && (
-        <div className="bg-card-bg border border-border-default rounded-card p-6">
-          <h3
-            className="text-[10px] uppercase tracking-[2px] mb-4"
-            style={{ color: ACCENT }}
-          >
-            Market Sizing
-          </h3>
+        <CollapsibleSection title="Market Sizing">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             {(["tam", "sam", "som"] as const).map((key) => (
               <div
@@ -357,18 +575,12 @@ function StructuredResults({ data }: { data: StructuredOutput }) {
               Methodology: {data.market_sizing.methodology}
             </p>
           )}
-        </div>
+        </CollapsibleSection>
       )}
 
       {/* ICP Profiles */}
       {data.icp_profiles?.length > 0 && (
-        <div className="bg-card-bg border border-border-default rounded-card p-6">
-          <h3
-            className="text-[10px] uppercase tracking-[2px] mb-4"
-            style={{ color: ACCENT }}
-          >
-            Ideal Customer Profiles
-          </h3>
+        <CollapsibleSection title="Ideal Customer Profiles">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {data.icp_profiles.map((icp, i) => (
               <div
@@ -437,18 +649,12 @@ function StructuredResults({ data }: { data: StructuredOutput }) {
               </div>
             ))}
           </div>
-        </div>
+        </CollapsibleSection>
       )}
 
       {/* Competitor Matrix */}
       {data.competitor_matrix?.length > 0 && (
-        <div className="bg-card-bg border border-border-default rounded-card p-6">
-          <h3
-            className="text-[10px] uppercase tracking-[2px] mb-4"
-            style={{ color: ACCENT }}
-          >
-            Competitor Matrix
-          </h3>
+        <CollapsibleSection title="Competitor Matrix">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -500,18 +706,12 @@ function StructuredResults({ data }: { data: StructuredOutput }) {
               </tbody>
             </table>
           </div>
-        </div>
+        </CollapsibleSection>
       )}
 
       {/* Pricing Intel */}
       {data.pricing_intel?.length > 0 && (
-        <div className="bg-card-bg border border-border-default rounded-card p-6">
-          <h3
-            className="text-[10px] uppercase tracking-[2px] mb-4"
-            style={{ color: ACCENT }}
-          >
-            Pricing Intelligence
-          </h3>
+        <CollapsibleSection title="Pricing Intelligence">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -561,18 +761,12 @@ function StructuredResults({ data }: { data: StructuredOutput }) {
               </tbody>
             </table>
           </div>
-        </div>
+        </CollapsibleSection>
       )}
 
       {/* Trend Analysis */}
       {data.trend_analysis?.length > 0 && (
-        <div className="bg-card-bg border border-border-default rounded-card p-6">
-          <h3
-            className="text-[10px] uppercase tracking-[2px] mb-4"
-            style={{ color: ACCENT }}
-          >
-            Trend Analysis
-          </h3>
+        <CollapsibleSection title="Trend Analysis">
           <div className="space-y-3">
             {data.trend_analysis.map((t, i) => (
               <div
@@ -604,6 +798,72 @@ function StructuredResults({ data }: { data: StructuredOutput }) {
               </div>
             ))}
           </div>
+        </CollapsibleSection>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sources Used
+// ---------------------------------------------------------------------------
+function SourcesSection({ sources }: { sources: KnowledgeSource[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="bg-card-bg border border-border-default rounded-card overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-4 hover:bg-white/[0.01] transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          </svg>
+          <span className="text-[10px] uppercase tracking-[2px] text-text-muted">
+            Sources Used
+          </span>
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded-full font-mono"
+            style={{ backgroundColor: `${ACCENT}20`, color: ACCENT }}
+          >
+            {sources.length}
+          </span>
+        </div>
+        <svg
+          className="w-4 h-4 text-text-muted transition-transform duration-200"
+          style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isOpen && (
+        <div className="px-4 pb-4 space-y-2">
+          {sources.map((source) => (
+            <div
+              key={source.id}
+              className="border border-border-default rounded-lg p-3"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-medium text-text-heading">
+                  {source.sourceDocument}
+                </span>
+                {source.sourceUrl && (
+                  <span className="text-[10px] text-text-dim truncate max-w-xs">
+                    {source.sourceUrl}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-text-secondary line-clamp-2">
+                {source.content.slice(0, 200)}
+                {source.content.length > 200 ? "..." : ""}
+              </p>
+            </div>
+          ))}
         </div>
       )}
     </div>

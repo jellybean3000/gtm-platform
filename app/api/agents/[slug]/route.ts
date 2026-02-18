@@ -54,9 +54,11 @@ export async function POST(
       teamId,
     });
 
-    const { stream } = await agentInstance.streamRun(input, orchestrationId);
+    const { stream, runId } = await agentInstance.streamRun(input, orchestrationId);
 
-    return stream.toTextStreamResponse();
+    const response = stream.toTextStreamResponse();
+    response.headers.set("X-Run-Id", runId);
+    return response;
   } catch (error) {
     console.error(`Agent ${slug} error:`, error);
     return new Response(
