@@ -1,7 +1,7 @@
 # GTM Multi-Agent Platform
 
 ## Project Overview
-A multi-agent Go-To-Market platform where 8 specialized AI agents are coordinated by a central GTM Engineer orchestrator. The platform ingests institutional knowledge (files, web links, integrations) through a Knowledge Intelligence Engine that grounds all agent work in the company's actual data, voice, and learnings.
+A multi-agent Go-To-Market platform where 9 specialized AI agents are coordinated by a central GTM Engineer orchestrator. The platform ingests institutional knowledge (files, web links, integrations) through a Knowledge Intelligence Engine that grounds all agent work in the company's actual data, voice, and learnings. A CRM Integration Agent connects the platform to HubSpot (free CRM), creating a live bridge between GTM strategy and actual deal activity.
 
 ## Architecture (5 Layers)
 
@@ -9,7 +9,7 @@ A multi-agent Go-To-Market platform where 8 specialized AI agents are coordinate
 All knowledge inputs — files, web links, and integrations.
 - **File Uploads**: .pptx, .pdf, .docx, .csv, .xlsx, .mp3, .mp4, .md
 - **Web Links**: URLs with 5 crawl modes (single page, site crawl, sitemap import, RSS monitor, scheduled recrawl)
-- **Integrations**: Google Drive, Notion, Confluence, Salesforce, Gong, Slack
+- **Integrations**: HubSpot CRM (primary — free tier), Google Drive, Notion, Confluence, Gong, Slack
 - **Live Monitoring**: Scheduled recrawls with change detection (content hash comparison)
 
 ### Layer 2 — Knowledge Intelligence Engine
@@ -19,24 +19,26 @@ Transforms raw sources into structured intelligence via a 4-stage pipeline:
 3. **Analyze**: Theme extraction → consistency analysis (flag contradictions) → gap detection → performance correlation
 4. **Index**: Knowledge graph (entities + relationships) → vector store (pgvector) → freshness tracking → access control
 
-Produces 8 intelligence outputs:
+Produces 9 intelligence outputs:
 - Brand Voice Model → powers Positioning, Content, Demand Gen, Sales Enablement
 - Proof Point Library → powers Content, Sales Enablement, Positioning
-- Competitive Intel DB → powers Market Research, Positioning, Sales Enablement
+- Competitive Intel DB → powers Market Research, Positioning, Sales Enablement, CRM Integration
 - Customer Voice Corpus → powers PMF, Positioning, Content, Demand Gen
 - Feature-Value Map → powers PMF, Content, Sales Enablement
 - Messaging Heritage → powers Positioning, Content
 - Performance Benchmarks → powers Analytics, Demand Gen, Launch Planning
-- Objection Knowledge Base → powers Sales Enablement, Positioning
+- Objection Knowledge Base → powers Sales Enablement, Positioning, CRM Integration
+- Live Pipeline Intelligence → powers Analytics, Sales Enablement, CRM Integration, Demand Gen (sourced from HubSpot CRM sync)
 
 ### Layer 3 — Specialist Agent Layer
-8 domain-specific agents. Each agent has: a system prompt, input/output schemas, core functions, tools (including knowledge base queries), and a dedicated visualization surface.
+9 domain-specific agents. Each agent has: a system prompt, input/output schemas, core functions, tools (including knowledge base queries), and a dedicated visualization surface.
 
 **Agent Dependency Graph (execution order):**
 - Foundation (parallel): Market Research Agent + PMF Agent
 - Strategy (after foundation): Positioning Agent + Analytics Agent
 - Execution (after strategy, parallel): Content Agent + Sales Enablement Agent + Demand Gen Agent
 - Orchestration (after execution): Launch Planning Agent
+- Always-on (runs independently, bidirectional data flow): CRM Integration Agent
 
 ### Layer 4 — Orchestration Layer
 The GTM Engineer orchestrator that:
@@ -75,7 +77,7 @@ Chat-based interface where the GTM leader makes requests and receives unified st
 - **Anthropic Claude API (claude-sonnet-4-5-20250929)** — primary LLM for ALL agents
 - **Claude Tool Use / Function Calling** — agents use tools to query knowledge base, generate files, fetch data
 - **Vercel AI SDK** — streaming, prompt management, multi-step agent chains
-- **OpenAI text-embedding-3-small** — embedding generation for document chunks
+- **Google Gemini text-embedding-004** — embedding generation for document chunks (free tier, Anthropic-compatible)
 - **Unstructured.io or LlamaParse** — document parsing (PDF, PPTX, DOCX, images)
 - **Firecrawl** — web crawling with JS rendering, rate limiting, structured extraction
 
@@ -98,7 +100,14 @@ web_sources — id, team_id, url, crawl_mode (single/site/sitemap/rss/scheduled)
 agents — id, name, slug, system_prompt, tools (json), input_schema (json), output_schema (json), dependencies (agent slugs[])
 agent_runs — id, team_id, agent_id, orchestration_id, status (queued/running/completed/failed), input (json), output (json), knowledge_sources_used (chunk_ids[]), started_at, completed_at, tokens_used
 orchestrations — id, team_id, user_request, parsed_intent (json), execution_dag (json), status, conflicts (json), final_synthesis (json), created_at
-intelligence_products — id, team_id, type (brand_voice/proof_points/competitive_intel/etc), data (json), source_chunk_ids[], freshness_score, last_updated
+intelligence_products — id, team_id, type (brand_voice/proof_points/competitive_intel/pipeline_intel/etc), data (json), source_chunk_ids[], freshness_score, last_updated
+
+# CRM Integration Tables
+hubspot_connections — id, team_id, access_token (encrypted), refresh_token (encrypted), hub_id, scopes[], connected_at, last_synced_at, sync_status
+crm_contacts — id, team_id, hubspot_id, email, name, company, title, lifecycle_stage, lead_score, icp_match_score, enrichment_data (json), last_synced_at
+crm_deals — id, team_id, hubspot_id, name, stage, amount, close_date, contact_ids[], company, pipeline, days_in_stage, health_score, risk_factors (json), recommended_actions (json), last_synced_at
+crm_activities — id, team_id, hubspot_id, deal_id, contact_id, type (email/call/meeting/note), summary, sentiment, next_steps, created_at
+crm_sync_log — id, team_id, direction (pull/push), entity_type, entity_id, action (create/update/sync), status, error_message, synced_at
 ```
 
 ---
@@ -168,6 +177,59 @@ intelligence_products — id, team_id, type (brand_voice/proof_points/competitiv
 - **Input**: product, launch_date, launch_type, channels, team_resources, agent_outputs
 - **Output**: timeline (Gantt), channel_strategy, launch_checklist, enablement_plan, readiness_gates[], risk_register
 - **Visualization**: Gantt timeline, checklist tracker, readiness gate dashboard, risk heatmap
+
+### 9. CRM Integration Agent (HubSpot)
+- **Slug**: `crm`
+- **Dependencies**: None (always-on, bidirectional — both consumes and feeds other agents)
+- **Tools**: `query_knowledge_base`, `hubspot_api` (contacts, deals, activities, pipelines), `enrich_contact`, `push_to_hubspot`
+- **CRM Platform**: HubSpot Free CRM (primary). Architecture supports adding Salesforce/Pipedrive later.
+- **Color**: `#FF7A59` (HubSpot orange)
+
+#### CRM Agent — Core Functions
+
+**PULL from HubSpot (inbound data):**
+- **sync_pipeline()**: Pulls all active deals with stage, amount, close date, contact info. Runs on schedule (every 15 min) and on-demand. Stores in crm_deals table. Feeds Analytics agent with live pipeline data instead of uploaded spreadsheets.
+- **sync_contacts()**: Pulls contacts with lifecycle stage, company, title, activity history. Stores in crm_contacts. Used for ICP matching and lead scoring.
+- **sync_activities()**: Pulls recent emails, calls, meetings, notes per deal. Stores in crm_activities. Used for deal health scoring and next-step recommendations.
+- **feed_knowledge_engine()**: Converts CRM data into knowledge chunks — deal outcomes become win/loss data, activity patterns become selling behavior insights, contact titles become persona validation data.
+
+**INTELLIGENCE (analysis & recommendations):**
+- **score_deal_health()**: For each active deal, calculates a health score (0-100) based on: days in current stage, activity recency, contact engagement, deal size vs. average, and ICP fit. Flags at-risk deals.
+- **match_icp()**: Compares each contact/company against ICP profiles from Market Research agent. Scores fit and identifies gaps. Surfaces "best fit" leads that aren't being worked.
+- **recommend_next_steps()**: For stalled or at-risk deals, uses knowledge base (objection playbook, competitive intel, talk tracks) to suggest specific next actions: "Send the ROI calculator", "Use the Acme competitive narrative", "Schedule a technical deep-dive."
+- **analyze_pipeline()**: Real-time pipeline analytics: velocity by stage, conversion rates, average deal size, forecast accuracy. Replaces the Analytics agent's need for uploaded CSVs.
+- **detect_patterns()**: Identifies winning and losing patterns across deals — which personas convert fastest, which stages have the biggest drop-off, which competitors appear in lost deals.
+
+**PUSH to HubSpot (outbound actions):**
+- **push_sequences()**: Takes email sequences from Sales Enablement agent and enrolls contacts in HubSpot sequences. Maps template variables to contact properties.
+- **push_collateral()**: Attaches battle cards, one-pagers, and case studies from Content agent to deal records as notes/attachments so reps have them in context.
+- **create_tasks()**: When recommend_next_steps() identifies an action, creates a HubSpot task assigned to the deal owner with the recommendation and supporting materials.
+- **enrich_contacts()**: Takes ICP match scores, enrichment data, and agent intelligence and writes it back to custom HubSpot contact properties so reps see it in their CRM.
+- **log_agent_activity()**: Logs agent recommendations and actions as CRM notes so there's a full audit trail of what the platform suggested.
+
+#### CRM Agent — Input/Output
+
+- **Input (for on-demand analysis)**: deal_id or contact_id (specific), pipeline_name (broad), analysis_type (health_check, icp_match, next_steps, pipeline_review, pattern_analysis)
+- **Output**: deal_health_cards[], icp_match_scores[], recommended_actions[], pipeline_dashboard, pattern_insights
+
+#### CRM Agent — Bidirectional Flow with Other Agents
+
+| Agent | CRM Pulls From It | CRM Pushes To It |
+|-------|-------------------|-------------------|
+| Market Research | ICP profiles for contact matching | Real deal data validates ICP accuracy |
+| Sales Enablement | Sequences, playbooks, talk tracks | Stalled deal triggers sequence creation |
+| Content | Battle cards, case studies, one-pagers | Deal context triggers content needs |
+| Analytics | — | Live pipeline data replaces uploaded CSVs |
+| Positioning | Competitive narratives | Win/loss patterns validate positioning |
+| Demand Gen | — | Lead source attribution, campaign ROI |
+| PMF | — | Customer satisfaction signals from deal outcomes |
+
+#### CRM Agent — Visualization Surface
+- **Pipeline Board**: Kanban-style deal view with health score badges (green/yellow/red), days-in-stage counters, and AI recommendation chips
+- **Deal Detail Panel**: Expanded view of a deal showing: health score breakdown, recommended next steps with supporting materials, activity timeline, ICP fit analysis
+- **Contact Intelligence Card**: Contact profile with ICP match score, engagement history, enrichment data, and suggested approach
+- **Pipeline Analytics**: Recharts dashboard with: velocity by stage, conversion funnel, forecast vs. actual, win/loss trends
+- **Sync Status**: Connection health, last sync time, sync log with push/pull activity
 
 ---
 
@@ -257,6 +319,7 @@ Change detection uses content hashing. When changes are detected:
     /demand-gen.ts
     /analytics.ts
     /pmf.ts
+    /crm.ts                   — CRM Integration Agent (HubSpot)
     /orchestrator.ts
   /knowledge                  — Knowledge engine
     /ingest.ts                — Document ingestion pipeline
@@ -264,6 +327,11 @@ Change detection uses content hashing. When changes are detected:
     /analyze.ts               — Theme extraction, consistency checks
     /retrieve.ts              — Semantic search and structured queries
     /crawl.ts                 — Web crawling and change detection
+  /crm                        — CRM integration layer
+    /hubspot-client.ts        — HubSpot API client (auth, contacts, deals, activities)
+    /sync.ts                  — Bidirectional sync engine (pull from / push to HubSpot)
+    /scoring.ts               — Deal health scoring and ICP matching logic
+    /actions.ts               — Push actions (enroll sequences, create tasks, enrich contacts)
   /db
     /schema.ts                — Drizzle schema definitions
     /queries.ts               — Reusable query functions
@@ -300,6 +368,7 @@ Change detection uses content hashing. When changes are detected:
 - Demand Gen: `#EC4899`
 - Analytics: `#6366F1`
 - PMF: `#14B8A6`
+- CRM Integration: `#FF7A59` (HubSpot orange)
 - Orchestrator: `#10B981` (with rainbow gradient accent)
 - Knowledge Engine: `#F59E0B`
 
@@ -343,7 +412,7 @@ Change detection uses content hashing. When changes are detected:
 ```
 DATABASE_URL=               # PostgreSQL connection string
 ANTHROPIC_API_KEY=          # Claude API key
-OPENAI_API_KEY=             # For embeddings (text-embedding-3-small)
+GEMINI_API_KEY=              # Google Gemini API key (for text-embedding-004)
 FIRECRAWL_API_KEY=          # Web crawling
 CLERK_SECRET_KEY=           # Authentication
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
@@ -352,4 +421,7 @@ S3_ACCESS_KEY=
 S3_SECRET_KEY=
 UPSTASH_REDIS_URL=          # Job queues and caching
 INNGEST_EVENT_KEY=          # Background job orchestration
+HUBSPOT_CLIENT_ID=          # HubSpot OAuth app client ID
+HUBSPOT_CLIENT_SECRET=      # HubSpot OAuth app client secret
+HUBSPOT_REDIRECT_URI=       # OAuth callback URL (e.g., https://yourapp.com/api/crm/callback)
 ```

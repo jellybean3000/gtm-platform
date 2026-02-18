@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { documents } from "@/lib/db/schema";
 import { getSupabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase/storage";
+import { processDocument } from "@/lib/knowledge/pipeline";
 
 const ALLOWED_TYPES: Record<string, string> = {
   "application/pdf": "pdf",
@@ -116,6 +117,11 @@ export async function POST(request: NextRequest) {
         },
       })
       .returning({ id: documents.id, status: documents.status });
+
+    // Trigger processing pipeline (fire-and-forget)
+    processDocument(doc.id).catch((err) =>
+      console.error(`Pipeline failed for document ${doc.id}:`, err)
+    );
 
     return NextResponse.json({
       id: doc.id,

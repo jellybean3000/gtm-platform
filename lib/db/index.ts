@@ -1,12 +1,14 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import * as schema from "./schema";
 
-const connectionString = process.env.DATABASE_URL!;
-
-const client = postgres(connectionString, {
-  prepare: false,
-  ssl: "require",
+const pool = new Pool({
+  host: "aws-1-us-east-1.pooler.supabase.com",
+  port: 6543,
+  user: "postgres.xaehuqpsmosztqhortdu",
+  password: "VWJFmmOh1UF21Yz1",
+  database: "postgres",
+  ssl: { rejectUnauthorized: false },
 });
 
-export const db = drizzle(client, { schema });
+export const db = drizzle(pool, { schema });
