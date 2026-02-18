@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { webSources } from "@/lib/db/schema";
 import { desc, eq } from "drizzle-orm";
+import { processWebSource } from "@/lib/knowledge/process-web";
 
 export async function GET(request: NextRequest) {
   const { userId } = await auth();
@@ -61,6 +62,11 @@ export async function POST(request: NextRequest) {
       crawlMode: mode,
     })
     .returning();
+
+  // Fire-and-forget: start crawling the source
+  processWebSource(source.id).catch((err) =>
+    console.error(`Web crawl failed for source ${source.id}:`, err)
+  );
 
   return NextResponse.json({ webSource: source });
 }

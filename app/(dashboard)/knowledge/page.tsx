@@ -6,6 +6,7 @@ import { FileUploadZone } from "@/components/knowledge/FileUploadZone";
 import { WebSourceInput } from "@/components/knowledge/WebSourceInput";
 import { RecentUploads } from "@/components/knowledge/RecentUploads";
 import { WebSourcesList } from "@/components/knowledge/WebSourcesList";
+import { TestQuery } from "@/components/knowledge/TestQuery";
 
 // Temporary hardcoded team ID until team management is built
 const TEMP_TEAM_ID = "00000000-0000-0000-0000-000000000001";
@@ -40,6 +41,8 @@ export default function KnowledgePage() {
         teamId={TEMP_TEAM_ID}
         onSourceAdded={triggerRefresh}
       />
+
+      <TestQuery teamId={TEMP_TEAM_ID} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RecentUploads teamId={TEMP_TEAM_ID} refreshKey={refreshKey} />
