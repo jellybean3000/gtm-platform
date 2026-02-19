@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { DownloadButton } from "@/components/shared/DownloadButton";
 
 const TEAM_ID = "00000000-0000-0000-0000-000000000001";
 const ACCENT = "#6366F1";
@@ -440,6 +441,12 @@ export default function AnalyticsPage() {
               style={{ borderColor: savedToKB ? "#6366F1" : `${ACCENT}40`, color: savedToKB ? "#6366F1" : ACCENT, backgroundColor: savedToKB ? "rgba(99,102,241,0.1)" : "transparent" }}>
               {savedToKB ? "Saved to Knowledge Base" : isSaving ? "Saving..." : "Save to Knowledge Base"}
             </button>
+            <DownloadButton
+              content={JSON.stringify(structured, null, 2)}
+              filename="analytics-report"
+              formats={["json", "md", "csv"]}
+              accentColor={ACCENT}
+            />
             {savedToKB && <span className="text-xs text-[#6366F1]">Other agents can now reference this analysis.</span>}
           </div>
         </>

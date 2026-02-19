@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { DownloadButton } from "@/components/shared/DownloadButton";
 
 const TEAM_ID = "00000000-0000-0000-0000-000000000001";
 const ACCENT = "#EF4444";
@@ -409,6 +410,12 @@ export default function LaunchPlanningPage() {
               style={{ borderColor: savedToKB ? "#EF4444" : `${ACCENT}40`, color: savedToKB ? "#EF4444" : ACCENT, backgroundColor: savedToKB ? "rgba(239,68,68,0.1)" : "transparent" }}>
               {savedToKB ? "Saved to Knowledge Base" : isSaving ? "Saving..." : "Save to Knowledge Base"}
             </button>
+            <DownloadButton
+              content={JSON.stringify(structured, null, 2)}
+              filename="launch-plan"
+              formats={["json", "md"]}
+              accentColor={ACCENT}
+            />
             {savedToKB && <span className="text-xs text-[#EF4444]">Launch plan saved to knowledge base.</span>}
           </div>
         </>

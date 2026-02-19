@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { toast } from "sonner";
+import { DownloadButton } from "@/components/shared/DownloadButton";
 
 const ACCENT = "#F97316";
 
@@ -267,10 +269,16 @@ export default function CRMPage() {
       const res = await fetch("/api/crm/sync", { method: "POST" });
       const data = await res.json();
       setSyncResult(data);
+      if (data.error) {
+        toast.error("CRM sync failed");
+      } else {
+        toast.success(`Synced ${data.dealsCount} deals, ${data.contactsCount} contacts`);
+      }
       fetchDeals();
       fetchSyncLogs();
     } catch {
       setSyncResult({ dealsCount: 0, contactsCount: 0, activitiesCount: 0, error: "Sync failed" });
+      toast.error("CRM sync failed");
     } finally {
       setSyncing(false);
     }
@@ -513,6 +521,16 @@ export default function CRMPage() {
                   />
                 )}
               </div>
+              {streamedOutput && !isRunning && (
+                <div className="mt-3">
+                  <DownloadButton
+                    content={streamedOutput}
+                    filename="crm-analysis"
+                    formats={["md", "txt"]}
+                    accentColor={ACCENT}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

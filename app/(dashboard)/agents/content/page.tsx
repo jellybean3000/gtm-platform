@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { DownloadButton } from "@/components/shared/DownloadButton";
 
 const TEAM_ID = "00000000-0000-0000-0000-000000000001";
 const ACCENT = "#F59E0B";
@@ -308,8 +310,10 @@ export default function ContentPage() {
 
       if (!res.ok) throw new Error("Failed to save");
       setSavedToKB(true);
+      toast.success("Saved to Knowledge Base");
     } catch {
       setError("Failed to save to knowledge base");
+      toast.error("Failed to save to Knowledge Base");
     } finally {
       setIsSaving(false);
     }
@@ -659,13 +663,12 @@ export default function ContentPage() {
 
               {/* Action buttons */}
               <div className="flex items-center gap-3 flex-wrap">
-                <button
-                  onClick={handleDownload}
-                  className="px-5 py-2.5 text-sm font-medium rounded-lg text-white transition-colors"
-                  style={{ backgroundColor: ACCENT }}
-                >
-                  Download as {getFileExtension(structured.metadata?.content_type || contentType).toUpperCase().replace(".", "")}
-                </button>
+                <DownloadButton
+                  content={structured.content || JSON.stringify(structured, null, 2)}
+                  filename={structured.metadata?.title?.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase() || "content"}
+                  formats={["md", "json", "txt"]}
+                  accentColor={ACCENT}
+                />
 
                 <button
                   onClick={handleSaveToKnowledge}

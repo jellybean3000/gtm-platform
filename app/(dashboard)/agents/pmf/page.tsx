@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { DownloadButton } from "@/components/shared/DownloadButton";
 
 const TEAM_ID = "00000000-0000-0000-0000-000000000001";
 const ACCENT = "#14B8A6";
@@ -453,6 +454,12 @@ export default function PMFPage() {
                   ? "Saving..."
                   : "Save to Knowledge Base"}
             </button>
+            <DownloadButton
+              content={JSON.stringify(structured, null, 2)}
+              filename="pmf-analysis"
+              formats={["json", "md"]}
+              accentColor={ACCENT}
+            />
             {savedToKB && (
               <span className="text-xs text-[#10B981]">
                 Other agents can now reference this analysis.

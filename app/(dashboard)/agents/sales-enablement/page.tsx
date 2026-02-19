@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { DownloadButton } from "@/components/shared/DownloadButton";
 
 const TEAM_ID = "00000000-0000-0000-0000-000000000001";
 const ACCENT = "#10B981";
@@ -462,6 +463,12 @@ export default function SalesEnablementPage() {
               style={{ borderColor: savedToKB ? "#10B981" : `${ACCENT}40`, color: savedToKB ? "#10B981" : ACCENT, backgroundColor: savedToKB ? "rgba(16,185,129,0.1)" : "transparent" }}>
               {savedToKB ? "Saved to Knowledge Base" : isSaving ? "Saving..." : "Save to Knowledge Base"}
             </button>
+            <DownloadButton
+              content={JSON.stringify(structured, null, 2)}
+              filename="sales-enablement"
+              formats={["json", "md"]}
+              accentColor={ACCENT}
+            />
             {savedToKB && <span className="text-xs text-[#10B981]">Other agents can now reference these materials.</span>}
           </div>
         </>

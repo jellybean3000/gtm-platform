@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { DownloadButton } from "@/components/shared/DownloadButton";
 
 const TEAM_ID = "00000000-0000-0000-0000-000000000001";
 const ACCENT = "#EC4899";
@@ -390,6 +391,12 @@ export default function DemandGenPage() {
               style={{ borderColor: savedToKB ? "#EC4899" : `${ACCENT}40`, color: savedToKB ? "#EC4899" : ACCENT, backgroundColor: savedToKB ? "rgba(236,72,153,0.1)" : "transparent" }}>
               {savedToKB ? "Saved to Knowledge Base" : isSaving ? "Saving..." : "Save to Knowledge Base"}
             </button>
+            <DownloadButton
+              content={JSON.stringify(structured, null, 2)}
+              filename="demand-gen"
+              formats={["json", "md"]}
+              accentColor={ACCENT}
+            />
             {savedToKB && <span className="text-xs text-[#EC4899]">Other agents can now reference this strategy.</span>}
           </div>
         </>
