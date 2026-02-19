@@ -4,6 +4,9 @@ import { PMFAgent } from "./pmf";
 import { PositioningAgent } from "./positioning";
 import { ContentAgent } from "./content";
 import { SalesEnablementAgent } from "./sales-enablement";
+import { DemandGenAgent } from "./demand-gen";
+import { AnalyticsAgent } from "./analytics";
+import { LaunchAgent } from "./launch";
 
 /**
  * Factory function that returns the correct agent subclass based on slug.
@@ -21,6 +24,12 @@ export function createAgent(slug: string, config: AgentConfig): BaseAgent {
       return new ContentAgent(config);
     case "sales-enablement":
       return new SalesEnablementAgent(config);
+    case "demand-gen":
+      return new DemandGenAgent(config);
+    case "analytics":
+      return new AnalyticsAgent(config);
+    case "launch":
+      return new LaunchAgent(config);
     default:
       return new BaseAgent(config);
   }
