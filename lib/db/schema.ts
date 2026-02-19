@@ -230,6 +230,117 @@ export const hubspotConnections = pgTable(
   (table) => [index("hubspot_connections_team_id_idx").on(table.teamId)]
 );
 
+// ---------------------------------------------------------------------------
+// CRM Sync Tables
+// ---------------------------------------------------------------------------
+
+export const crmSyncStatusEnum = pgEnum("crm_sync_status", [
+  "running",
+  "completed",
+  "failed",
+]);
+
+export const crmDeals = pgTable(
+  "crm_deals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id),
+    hubspotDealId: varchar("hubspot_deal_id", { length: 50 }).notNull(),
+    dealName: varchar("deal_name", { length: 512 }).notNull(),
+    amount: varchar("amount", { length: 50 }),
+    stage: varchar("stage", { length: 255 }),
+    pipeline: varchar("pipeline", { length: 255 }),
+    closeDate: timestamp("close_date"),
+    ownerName: varchar("owner_name", { length: 255 }),
+    ownerEmail: varchar("owner_email", { length: 255 }),
+    daysInStage: integer("days_in_stage"),
+    healthScore: integer("health_score"),
+    properties: jsonb("properties"),
+    lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("crm_deals_team_id_idx").on(table.teamId),
+    index("crm_deals_hubspot_id_idx").on(table.teamId, table.hubspotDealId),
+  ]
+);
+
+export const crmContacts = pgTable(
+  "crm_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id),
+    hubspotContactId: varchar("hubspot_contact_id", { length: 50 }).notNull(),
+    email: varchar("email", { length: 255 }),
+    firstName: varchar("first_name", { length: 255 }),
+    lastName: varchar("last_name", { length: 255 }),
+    company: varchar("company", { length: 255 }),
+    title: varchar("title", { length: 255 }),
+    lifecycleStage: varchar("lifecycle_stage", { length: 100 }),
+    associatedDealIds: text("associated_deal_ids").array(),
+    properties: jsonb("properties"),
+    lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("crm_contacts_team_id_idx").on(table.teamId),
+    index("crm_contacts_hubspot_id_idx").on(
+      table.teamId,
+      table.hubspotContactId
+    ),
+  ]
+);
+
+export const crmActivities = pgTable(
+  "crm_activities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id),
+    hubspotActivityId: varchar("hubspot_activity_id", {
+      length: 50,
+    }).notNull(),
+    type: varchar("type", { length: 50 }).notNull(),
+    dealHubspotId: varchar("deal_hubspot_id", { length: 50 }),
+    contactHubspotId: varchar("contact_hubspot_id", { length: 50 }),
+    subject: text("subject"),
+    body: text("body"),
+    occurredAt: timestamp("occurred_at"),
+    properties: jsonb("properties"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("crm_activities_team_id_idx").on(table.teamId),
+    index("crm_activities_deal_idx").on(table.teamId, table.dealHubspotId),
+  ]
+);
+
+export const crmSyncLog = pgTable(
+  "crm_sync_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id),
+    syncType: varchar("sync_type", { length: 50 }).notNull(),
+    status: crmSyncStatusEnum("status").notNull().default("running"),
+    dealsCount: integer("deals_count"),
+    contactsCount: integer("contacts_count"),
+    activitiesCount: integer("activities_count"),
+    error: text("error"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [index("crm_sync_log_team_id_idx").on(table.teamId)]
+);
+
 export const intelligenceProducts = pgTable("intelligence_products", {
   id: uuid("id").primaryKey().defaultRandom(),
   teamId: uuid("team_id")

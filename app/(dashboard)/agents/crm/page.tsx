@@ -40,6 +40,18 @@ interface CRMStatus {
   dataError?: string;
 }
 
+interface SyncLog {
+  id: string;
+  syncType: string;
+  status: string;
+  dealsCount: number | null;
+  contactsCount: number | null;
+  activitiesCount: number | null;
+  error: string | null;
+  startedAt: string;
+  completedAt: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -49,6 +61,15 @@ export default function CRMPage() {
   const [activeTab, setActiveTab] = useState<
     "contacts" | "deals" | "companies"
   >("contacts");
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    dealsCount: number;
+    contactsCount: number;
+    activitiesCount: number;
+    error?: string;
+  } | null>(null);
+  const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
+  const [showSyncLog, setShowSyncLog] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -62,9 +83,36 @@ export default function CRMPage() {
     }
   }, []);
 
+  const fetchSyncLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/crm/sync");
+      const data = await res.json();
+      setSyncLogs(data.logs || []);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     fetchStatus();
-  }, [fetchStatus]);
+    fetchSyncLogs();
+  }, [fetchStatus, fetchSyncLogs]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/crm/sync", { method: "POST" });
+      const data = await res.json();
+      setSyncResult(data);
+      fetchStatus();
+      fetchSyncLogs();
+    } catch {
+      setSyncResult({ dealsCount: 0, contactsCount: 0, activitiesCount: 0, error: "Sync failed" });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // -----------------------------------------------------------------------
   // Render
@@ -107,6 +155,142 @@ export default function CRMPage() {
       ) : (
         <>
           <ConnectedCard status={status} />
+
+          {/* Sync Controls */}
+          <div
+            style={{
+              marginTop: 16,
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 14,
+              padding: "16px 20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    color: "#E4E4E7",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    fontFamily: "'Outfit', 'DM Sans', sans-serif",
+                  }}
+                >
+                  Data Sync
+                </div>
+                <div style={{ color: "#71717A", fontSize: 12, marginTop: 2 }}>
+                  {syncLogs.length > 0 && syncLogs[0].completedAt
+                    ? `Last synced: ${new Date(syncLogs[0].completedAt).toLocaleString()}`
+                    : "Never synced"}
+                  {syncLogs.length > 0 && syncLogs[0].status === "completed" &&
+                    ` — ${syncLogs[0].dealsCount ?? 0} deals, ${syncLogs[0].contactsCount ?? 0} contacts, ${syncLogs[0].activitiesCount ?? 0} activities`}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  onClick={() => setShowSyncLog(!showSyncLog)}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 8,
+                    padding: "6px 14px",
+                    color: "#A1A1AA",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    fontFamily: "'Outfit', 'DM Sans', sans-serif",
+                  }}
+                >
+                  {showSyncLog ? "Hide Log" : "Sync Log"}
+                </button>
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  style={{
+                    background: ACCENT,
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "6px 18px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: syncing ? "not-allowed" : "pointer",
+                    opacity: syncing ? 0.6 : 1,
+                    fontFamily: "'Outfit', 'DM Sans', sans-serif",
+                  }}
+                >
+                  {syncing ? "Syncing..." : "Sync Now"}
+                </button>
+              </div>
+            </div>
+
+            {syncResult && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  background: syncResult.error
+                    ? "rgba(239,68,68,0.1)"
+                    : "rgba(16,185,129,0.1)",
+                  border: syncResult.error
+                    ? "1px solid rgba(239,68,68,0.2)"
+                    : "1px solid rgba(16,185,129,0.2)",
+                  color: syncResult.error ? "#FCA5A5" : "#6EE7B7",
+                  fontFamily: "'IBM Plex Mono', monospace",
+                }}
+              >
+                {syncResult.error
+                  ? `Sync failed: ${syncResult.error}`
+                  : `Synced ${syncResult.dealsCount} deals, ${syncResult.contactsCount} contacts, ${syncResult.activitiesCount} activities`}
+              </div>
+            )}
+
+            {showSyncLog && syncLogs.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                {syncLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "6px 0",
+                      borderBottom: "1px solid rgba(255,255,255,0.03)",
+                      fontSize: 11,
+                      fontFamily: "'IBM Plex Mono', monospace",
+                    }}
+                  >
+                    <span style={{ color: "#71717A" }}>
+                      {new Date(log.startedAt).toLocaleString()}
+                    </span>
+                    <span
+                      style={{
+                        color:
+                          log.status === "completed"
+                            ? "#6EE7B7"
+                            : log.status === "failed"
+                              ? "#FCA5A5"
+                              : "#FBBF24",
+                      }}
+                    >
+                      {log.status}
+                    </span>
+                    <span style={{ color: "#A1A1AA" }}>
+                      {log.status === "completed"
+                        ? `${log.dealsCount ?? 0}d / ${log.contactsCount ?? 0}c / ${log.activitiesCount ?? 0}a`
+                        : log.error || "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Data Preview */}
           {status.preview && (

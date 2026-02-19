@@ -15,6 +15,13 @@
       "when": 1771508463348,
       "tag": "0001_big_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771514315851,
+      "tag": "0002_dashing_bastion",
+      "breakpoints": true
     }
   ]
 }
