@@ -96,6 +96,9 @@ export default function ContentPage() {
   const [includePositioning, setIncludePositioning] = useState(true);
   const [positioningAvailable, setPositioningAvailable] = useState(false);
   const [positioningSummary, setPositioningSummary] = useState("");
+  const [includeCrmContext, setIncludeCrmContext] = useState(false);
+  const [crmAvailable, setCrmAvailable] = useState(false);
+  const [crmSummary, setCrmSummary] = useState("");
 
   const [isRunning, setIsRunning] = useState(false);
   const [streamedText, setStreamedText] = useState("");
@@ -113,6 +116,7 @@ export default function ContentPage() {
 
   const outputRef = useRef<HTMLDivElement>(null);
   const positioningOutputRef = useRef<string | null>(null);
+  const crmDataRef = useRef<string | null>(null);
 
   const fetchRuns = useCallback(async () => {
     try {
@@ -148,10 +152,26 @@ export default function ContentPage() {
     }
   }, []);
 
+  const checkCrmContext = useCallback(async () => {
+    try {
+      const res = await fetch("/api/crm/context");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.available) {
+          setCrmAvailable(true);
+          setCrmSummary(data.summary);
+          crmDataRef.current = data.dealsSummary || null;
+          setIncludeCrmContext(true);
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchRuns();
     checkPositioning();
-  }, [fetchRuns, checkPositioning]);
+    checkCrmContext();
+  }, [fetchRuns, checkPositioning, checkCrmContext]);
 
   useEffect(() => {
     if (outputRef.current) {
@@ -215,6 +235,9 @@ export default function ContentPage() {
 
       if (includePositioning && positioningOutputRef.current) {
         input.positioning_context = positioningOutputRef.current;
+      }
+      if (includeCrmContext && crmDataRef.current) {
+        input.crm_context = crmDataRef.current;
       }
 
       const res = await fetch("/api/agents/content", {
@@ -467,49 +490,79 @@ export default function ContentPage() {
               />
             </div>
 
-            {/* Positioning Toggle */}
-            <div className="max-w-md">
-              <button
-                onClick={() =>
-                  positioningAvailable &&
-                  setIncludePositioning(!includePositioning)
-                }
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm text-left transition-colors ${
-                  !positioningAvailable
-                    ? "border-border-default text-text-dim cursor-not-allowed"
-                    : includePositioning
-                      ? "border-[#F59E0B]/40 text-text-heading"
-                      : "border-border-default text-text-secondary hover:border-[#F59E0B]/20"
-                }`}
-              >
-                <div
-                  className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${
-                    includePositioning && positioningAvailable
-                      ? "bg-[#F59E0B]"
-                      : "bg-white/[0.08]"
+            {/* Context Toggles */}
+            <div className="flex gap-3 flex-wrap">
+              <div className="max-w-md flex-1">
+                <button
+                  onClick={() =>
+                    positioningAvailable &&
+                    setIncludePositioning(!includePositioning)
+                  }
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm text-left transition-colors ${
+                    !positioningAvailable
+                      ? "border-border-default text-text-dim cursor-not-allowed"
+                      : includePositioning
+                        ? "border-[#F59E0B]/40 text-text-heading"
+                        : "border-border-default text-text-secondary hover:border-[#F59E0B]/20"
                   }`}
                 >
                   <div
-                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                    className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${
                       includePositioning && positioningAvailable
-                        ? "translate-x-3.5"
-                        : "translate-x-0.5"
+                        ? "bg-[#F59E0B]"
+                        : "bg-white/[0.08]"
                     }`}
-                  />
-                </div>
-                <div>
-                  <span className="block">Include Latest Positioning</span>
-                  {positioningAvailable ? (
+                  >
+                    <div
+                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        includePositioning && positioningAvailable
+                          ? "translate-x-3.5"
+                          : "translate-x-0.5"
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <span className="block">Include Latest Positioning</span>
                     <span className="text-[10px] text-text-dim">
-                      {positioningSummary}...
+                      {positioningAvailable ? `${positioningSummary}...` : "No positioning runs yet"}
                     </span>
-                  ) : (
+                  </div>
+                </button>
+              </div>
+              <div className="max-w-md flex-1">
+                <button
+                  onClick={() => crmAvailable && setIncludeCrmContext(!includeCrmContext)}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm text-left transition-colors ${
+                    !crmAvailable
+                      ? "border-border-default text-text-dim cursor-not-allowed"
+                      : includeCrmContext
+                        ? "border-[#F97316]/40 text-text-heading"
+                        : "border-border-default text-text-secondary hover:border-[#F97316]/20"
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${
+                      includeCrmContext && crmAvailable
+                        ? "bg-[#F97316]"
+                        : "bg-white/[0.08]"
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        includeCrmContext && crmAvailable
+                          ? "translate-x-3.5"
+                          : "translate-x-0.5"
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <span className="block">CRM Context</span>
                     <span className="text-[10px] text-text-dim">
-                      No positioning runs yet
+                      {crmAvailable ? crmSummary : "No CRM data synced yet"}
                     </span>
-                  )}
-                </div>
-              </button>
+                  </div>
+                </button>
+              </div>
             </div>
 
             <button

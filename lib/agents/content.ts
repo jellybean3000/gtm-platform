@@ -39,6 +39,9 @@ export class ContentAgent extends BaseAgent {
     if (input.additional_context) {
       parts.push(String(input.additional_context).slice(0, 300));
     }
+    if (input.crm_context) {
+      parts.push("CRM deals win loss competitor battle card pipeline data customer insights");
+    }
 
     // Always retrieve brand voice and proof points
     parts.push("proof points customer quotes brand voice case study testimonial");

@@ -112,6 +112,9 @@ export class SalesEnablementAgent extends BaseAgent {
     if (input.output_type) {
       parts.push(`output type: ${input.output_type}`);
     }
+    if (input.crm_context) {
+      parts.push("CRM real objections deal activity call notes email responses pipeline");
+    }
 
     parts.push("objection handling competitive intel proof points customer quotes pricing");
 

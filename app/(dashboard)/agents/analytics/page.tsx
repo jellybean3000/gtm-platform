@@ -123,6 +123,9 @@ export default function AnalyticsPage() {
   const [includeMarketResearch, setIncludeMarketResearch] = useState(true);
   const [mrAvailable, setMrAvailable] = useState(false);
   const [mrSummary, setMrSummary] = useState("");
+  const [includeLivePipeline, setIncludeLivePipeline] = useState(false);
+  const [pipelineAvailable, setPipelineAvailable] = useState(false);
+  const [pipelineSummary, setPipelineSummary] = useState("");
 
   const [isRunning, setIsRunning] = useState(false);
   const [streamedText, setStreamedText] = useState("");
@@ -137,6 +140,7 @@ export default function AnalyticsPage() {
 
   const outputRef = useRef<HTMLDivElement>(null);
   const mrOutputRef = useRef<string | null>(null);
+  const pipelineDataRef = useRef<string | null>(null);
 
   const fetchRuns = useCallback(async () => {
     try {
@@ -161,7 +165,22 @@ export default function AnalyticsPage() {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { fetchRuns(); checkMarketResearch(); }, [fetchRuns, checkMarketResearch]);
+  const checkCrmContext = useCallback(async () => {
+    try {
+      const res = await fetch("/api/crm/context");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.available) {
+          setPipelineAvailable(true);
+          setPipelineSummary(data.summary);
+          pipelineDataRef.current = data.dealsSummary || null;
+          setIncludeLivePipeline(true);
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { fetchRuns(); checkMarketResearch(); checkCrmContext(); }, [fetchRuns, checkMarketResearch, checkCrmContext]);
   useEffect(() => { if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight; }, [streamedText]);
 
   async function fetchSources(runId: string) {
@@ -188,6 +207,9 @@ export default function AnalyticsPage() {
       };
       if (includeMarketResearch && mrOutputRef.current) {
         input.market_research_context = mrOutputRef.current;
+      }
+      if (includeLivePipeline && pipelineDataRef.current) {
+        input.live_pipeline_context = pipelineDataRef.current;
       }
 
       const res = await fetch("/api/agents/analytics", {
@@ -306,25 +328,46 @@ export default function AnalyticsPage() {
             className="w-full bg-background border border-border-default rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-text-dim focus:outline-none focus:border-[#6366F1]/40 transition-colors" />
         </div>
 
-        {/* Market Research Toggle */}
-        <div className="max-w-md">
-          <button onClick={() => mrAvailable && setIncludeMarketResearch(!includeMarketResearch)}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm text-left transition-colors ${
-              !mrAvailable ? "border-border-default text-text-dim cursor-not-allowed"
-                : includeMarketResearch ? "border-[#6366F1]/40 text-text-heading"
-                  : "border-border-default text-text-secondary hover:border-[#6366F1]/20"}`}>
-            <div className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${
-              includeMarketResearch && mrAvailable ? "bg-[#6366F1]" : "bg-white/[0.08]"}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                includeMarketResearch && mrAvailable ? "translate-x-3.5" : "translate-x-0.5"}`} />
-            </div>
-            <div>
-              <span className="block">Include Market Research</span>
-              <span className="text-[10px] text-text-dim">
-                {mrAvailable ? `${mrSummary}...` : "No market research runs yet"}
-              </span>
-            </div>
-          </button>
+        {/* Context Toggles */}
+        <div className="flex gap-3 flex-wrap">
+          <div className="max-w-md flex-1">
+            <button onClick={() => mrAvailable && setIncludeMarketResearch(!includeMarketResearch)}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm text-left transition-colors ${
+                !mrAvailable ? "border-border-default text-text-dim cursor-not-allowed"
+                  : includeMarketResearch ? "border-[#6366F1]/40 text-text-heading"
+                    : "border-border-default text-text-secondary hover:border-[#6366F1]/20"}`}>
+              <div className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${
+                includeMarketResearch && mrAvailable ? "bg-[#6366F1]" : "bg-white/[0.08]"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                  includeMarketResearch && mrAvailable ? "translate-x-3.5" : "translate-x-0.5"}`} />
+              </div>
+              <div>
+                <span className="block">Include Market Research</span>
+                <span className="text-[10px] text-text-dim">
+                  {mrAvailable ? `${mrSummary}...` : "No market research runs yet"}
+                </span>
+              </div>
+            </button>
+          </div>
+          <div className="max-w-md flex-1">
+            <button onClick={() => pipelineAvailable && setIncludeLivePipeline(!includeLivePipeline)}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm text-left transition-colors ${
+                !pipelineAvailable ? "border-border-default text-text-dim cursor-not-allowed"
+                  : includeLivePipeline ? "border-[#F97316]/40 text-text-heading"
+                    : "border-border-default text-text-secondary hover:border-[#F97316]/20"}`}>
+              <div className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${
+                includeLivePipeline && pipelineAvailable ? "bg-[#F97316]" : "bg-white/[0.08]"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                  includeLivePipeline && pipelineAvailable ? "translate-x-3.5" : "translate-x-0.5"}`} />
+              </div>
+              <div>
+                <span className="block">Live Pipeline</span>
+                <span className="text-[10px] text-text-dim">
+                  {pipelineAvailable ? pipelineSummary : "No CRM data synced yet"}
+                </span>
+              </div>
+            </button>
+          </div>
         </div>
 
         <button onClick={handleRun} disabled={isRunning || !dataDescription.trim()}

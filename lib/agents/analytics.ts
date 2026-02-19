@@ -83,6 +83,9 @@ export class AnalyticsAgent extends BaseAgent {
     if (input.segments) {
       parts.push(`segments: ${String(input.segments).slice(0, 200)}`);
     }
+    if (input.live_pipeline_context) {
+      parts.push("CRM pipeline deals conversion funnel stages win loss deal health");
+    }
 
     parts.push("performance benchmarks metrics analytics conversion funnel revenue");
 
