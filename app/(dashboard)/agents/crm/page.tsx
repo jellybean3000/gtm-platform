@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 
-const TEAM_ID = "00000000-0000-0000-0000-000000000001";
 const ACCENT = "#F97316";
 
 // ---------------------------------------------------------------------------
@@ -36,9 +35,6 @@ interface Company {
 
 interface CRMStatus {
   connected: boolean;
-  portalId?: string;
-  hubName?: string;
-  lastUpdated?: string;
   counts?: { contacts: number; deals: number; companies: number };
   preview?: { contacts: Contact[]; deals: Deal[]; companies: Company[] };
   dataError?: string;
@@ -50,15 +46,13 @@ interface CRMStatus {
 export default function CRMPage() {
   const [status, setStatus] = useState<CRMStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "contacts" | "deals" | "companies"
   >("contacts");
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/crm/status?teamId=${TEAM_ID}`);
+      const res = await fetch("/api/crm/status");
       const data = await res.json();
       setStatus(data);
     } catch {
@@ -71,44 +65,6 @@ export default function CRMPage() {
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
-
-  // Check for ?connected=true in URL
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "true") {
-      window.history.replaceState({}, "", "/agents/crm");
-      fetchStatus();
-    }
-  }, [fetchStatus]);
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    try {
-      const res = await fetch(`/api/crm/connect?teamId=${TEAM_ID}`);
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch {
-      setConnecting(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    setDisconnecting(true);
-    try {
-      await fetch("/api/crm/disconnect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamId: TEAM_ID }),
-      });
-      setStatus({ connected: false });
-    } catch {
-      // ignore
-    } finally {
-      setDisconnecting(false);
-    }
-  };
 
   // -----------------------------------------------------------------------
   // Render
@@ -147,17 +103,10 @@ export default function CRMPage() {
       {loading ? (
         <LoadingCard />
       ) : !status?.connected ? (
-        <DisconnectedCard
-          connecting={connecting}
-          onConnect={handleConnect}
-        />
+        <NotConfiguredCard hasError={!!status?.dataError} />
       ) : (
         <>
-          <ConnectedCard
-            status={status}
-            disconnecting={disconnecting}
-            onDisconnect={handleDisconnect}
-          />
+          <ConnectedCard status={status} />
 
           {/* Data Preview */}
           {status.preview && (
@@ -267,13 +216,7 @@ function LoadingCard() {
   );
 }
 
-function DisconnectedCard({
-  connecting,
-  onConnect,
-}: {
-  connecting: boolean;
-  onConnect: () => void;
-}) {
+function NotConfiguredCard({ hasError }: { hasError: boolean }) {
   return (
     <div
       style={{
@@ -284,7 +227,6 @@ function DisconnectedCard({
         textAlign: "center",
       }}
     >
-      {/* HubSpot logo placeholder */}
       <div
         style={{
           width: 64,
@@ -310,63 +252,42 @@ function DisconnectedCard({
           fontFamily: "'Outfit', 'DM Sans', sans-serif",
         }}
       >
-        Connect HubSpot
+        {hasError ? "Connection Error" : "HubSpot Not Connected"}
       </h2>
       <p
         style={{
           color: "#71717A",
           fontSize: 13,
           margin: "0 0 24px",
-          maxWidth: 420,
+          maxWidth: 480,
           marginLeft: "auto",
           marginRight: "auto",
+          lineHeight: 1.6,
         }}
       >
-        Link your HubSpot account to import contacts, deals, and company data.
-        This data will be available to all agents for grounding their analysis.
+        {hasError
+          ? "Could not connect to HubSpot. Please check that the HUBSPOT_ACCESS_TOKEN environment variable is set correctly."
+          : "To connect HubSpot, add your Private App access token as the HUBSPOT_ACCESS_TOKEN environment variable. Create a Private App in your HubSpot Developer settings with contacts, deals, and companies read scopes."}
       </p>
-      <button
-        onClick={onConnect}
-        disabled={connecting}
-        style={{
-          background: ACCENT,
-          color: "#fff",
-          border: "none",
-          borderRadius: 8,
-          padding: "10px 28px",
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: connecting ? "not-allowed" : "pointer",
-          opacity: connecting ? 0.6 : 1,
-          fontFamily: "'Outfit', 'DM Sans', sans-serif",
-          transition: "opacity 0.2s",
-        }}
-      >
-        {connecting ? "Redirecting..." : "Connect HubSpot"}
-      </button>
       <div
         style={{
-          marginTop: 16,
-          fontSize: 11,
-          color: "#52525B",
+          display: "inline-block",
+          padding: "10px 20px",
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 8,
           fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 12,
+          color: "#A1A1AA",
         }}
       >
-        Requires: contacts, deals, and companies read access
+        HUBSPOT_ACCESS_TOKEN=pat-na2-...
       </div>
     </div>
   );
 }
 
-function ConnectedCard({
-  status,
-  disconnecting,
-  onDisconnect,
-}: {
-  status: CRMStatus;
-  disconnecting: boolean;
-  onDisconnect: () => void;
-}) {
+function ConnectedCard({ status }: { status: CRMStatus }) {
   return (
     <div
       style={{
@@ -376,61 +297,26 @@ function ConnectedCard({
         padding: "24px 28px",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {/* Green status dot */}
-          <div
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              background: "#10B981",
-              boxShadow: "0 0 8px rgba(16,185,129,0.5)",
-            }}
-          />
-          <div>
-            <div
-              style={{
-                color: "#FAFAFA",
-                fontSize: 16,
-                fontWeight: 600,
-                fontFamily: "'Outfit', 'DM Sans', sans-serif",
-              }}
-            >
-              HubSpot Connected
-            </div>
-            <div style={{ color: "#71717A", fontSize: 12, marginTop: 2 }}>
-              Portal {status.portalId || "—"}
-              {status.hubName ? ` · ${status.hubName}` : ""}
-              {status.lastUpdated &&
-                ` · Last synced ${new Date(status.lastUpdated).toLocaleDateString()}`}
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={onDisconnect}
-          disabled={disconnecting}
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div
           style={{
-            background: "rgba(239,68,68,0.1)",
-            color: "#EF4444",
-            border: "1px solid rgba(239,68,68,0.2)",
-            borderRadius: 8,
-            padding: "6px 16px",
-            fontSize: 12,
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background: "#10B981",
+            boxShadow: "0 0 8px rgba(16,185,129,0.5)",
+          }}
+        />
+        <div
+          style={{
+            color: "#FAFAFA",
+            fontSize: 16,
             fontWeight: 600,
-            cursor: disconnecting ? "not-allowed" : "pointer",
-            opacity: disconnecting ? 0.6 : 1,
             fontFamily: "'Outfit', 'DM Sans', sans-serif",
           }}
         >
-          {disconnecting ? "Disconnecting..." : "Disconnect"}
-        </button>
+          HubSpot Connected
+        </div>
       </div>
 
       {/* Count badges */}
@@ -445,17 +331,9 @@ function ConnectedCard({
           }}
         >
           {[
-            {
-              label: "Contacts",
-              count: status.counts.contacts,
-              icon: "👤",
-            },
+            { label: "Contacts", count: status.counts.contacts, icon: "👤" },
             { label: "Deals", count: status.counts.deals, icon: "💰" },
-            {
-              label: "Companies",
-              count: status.counts.companies,
-              icon: "🏢",
-            },
+            { label: "Companies", count: status.counts.companies, icon: "🏢" },
           ].map((item) => (
             <div
               key={item.label}
