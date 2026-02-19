@@ -3,6 +3,7 @@ import { MarketResearchAgent } from "./market-research";
 import { PMFAgent } from "./pmf";
 import { PositioningAgent } from "./positioning";
 import { ContentAgent } from "./content";
+import { SalesEnablementAgent } from "./sales-enablement";
 
 /**
  * Factory function that returns the correct agent subclass based on slug.
@@ -18,6 +19,8 @@ export function createAgent(slug: string, config: AgentConfig): BaseAgent {
       return new PositioningAgent(config);
     case "content":
       return new ContentAgent(config);
+    case "sales-enablement":
+      return new SalesEnablementAgent(config);
     default:
       return new BaseAgent(config);
   }
