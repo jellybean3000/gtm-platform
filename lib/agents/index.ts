@@ -7,6 +7,7 @@ import { SalesEnablementAgent } from "./sales-enablement";
 import { DemandGenAgent } from "./demand-gen";
 import { AnalyticsAgent } from "./analytics";
 import { LaunchAgent } from "./launch";
+import { CRMAgent } from "./crm";
 
 /**
  * Factory function that returns the correct agent subclass based on slug.
@@ -30,6 +31,8 @@ export function createAgent(slug: string, config: AgentConfig): BaseAgent {
       return new AnalyticsAgent(config);
     case "launch":
       return new LaunchAgent(config);
+    case "crm":
+      return new CRMAgent(config);
     default:
       return new BaseAgent(config);
   }

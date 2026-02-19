@@ -160,6 +160,14 @@ export async function getAllContacts(): Promise<HubSpotContact[]> {
   return allContacts;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractAssociations(record: any): { dealIds: string[]; contactIds: string[] } {
+  const assoc = record.associations || {};
+  const dealIds = (assoc.deals?.results || []).map((r: { id: string }) => r.id);
+  const contactIds = (assoc.contacts?.results || []).map((r: { id: string }) => r.id);
+  return { dealIds, contactIds };
+}
+
 export async function getEngagements(
   limit = 200
 ): Promise<HubSpotEngagement[]> {
@@ -171,13 +179,16 @@ export async function getEngagements(
     const notes = await client.crm.objects.notes.basicApi.getPage(
       Math.min(limit, 100),
       undefined,
-      ["hs_note_body", "hs_timestamp", "hs_lastmodifieddate"]
+      ["hs_note_body", "hs_timestamp", "hs_lastmodifieddate"],
+      undefined,
+      ["deals", "contacts"]
     );
     for (const n of notes.results) {
       engagements.push({
         id: n.id,
         type: "note",
         properties: n.properties,
+        associations: extractAssociations(n),
       });
     }
   } catch {
@@ -189,13 +200,16 @@ export async function getEngagements(
     const emails = await client.crm.objects.emails.basicApi.getPage(
       Math.min(limit, 100),
       undefined,
-      ["hs_email_subject", "hs_email_text", "hs_timestamp"]
+      ["hs_email_subject", "hs_email_text", "hs_timestamp"],
+      undefined,
+      ["deals", "contacts"]
     );
     for (const e of emails.results) {
       engagements.push({
         id: e.id,
         type: "email",
         properties: e.properties,
+        associations: extractAssociations(e),
       });
     }
   } catch {
@@ -207,13 +221,16 @@ export async function getEngagements(
     const calls = await client.crm.objects.calls.basicApi.getPage(
       Math.min(limit, 100),
       undefined,
-      ["hs_call_title", "hs_call_body", "hs_timestamp", "hs_call_duration"]
+      ["hs_call_title", "hs_call_body", "hs_timestamp", "hs_call_duration"],
+      undefined,
+      ["deals", "contacts"]
     );
     for (const c of calls.results) {
       engagements.push({
         id: c.id,
         type: "call",
         properties: c.properties,
+        associations: extractAssociations(c),
       });
     }
   } catch {
@@ -225,13 +242,16 @@ export async function getEngagements(
     const meetings = await client.crm.objects.meetings.basicApi.getPage(
       Math.min(limit, 100),
       undefined,
-      ["hs_meeting_title", "hs_meeting_body", "hs_timestamp"]
+      ["hs_meeting_title", "hs_meeting_body", "hs_timestamp"],
+      undefined,
+      ["deals", "contacts"]
     );
     for (const m of meetings.results) {
       engagements.push({
         id: m.id,
         type: "meeting",
         properties: m.properties,
+        associations: extractAssociations(m),
       });
     }
   } catch {

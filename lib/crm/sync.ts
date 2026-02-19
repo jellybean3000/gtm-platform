@@ -16,6 +16,7 @@ import {
 import { dealsToText, contactsToText, activitiesToText } from "./transform";
 import { chunkText } from "@/lib/knowledge/chunk";
 import { generateEmbeddings } from "@/lib/knowledge/embed";
+import { dealHealthScore } from "./scoring";
 
 // ---------------------------------------------------------------------------
 // Sync Deals
@@ -170,6 +171,8 @@ export async function syncActivities(teamId: string): Promise<number> {
       teamId,
       hubspotActivityId: eng.id,
       type: eng.type,
+      dealHubspotId: eng.associations?.dealIds?.[0] || null,
+      contactHubspotId: eng.associations?.contactIds?.[0] || null,
       subject,
       body,
       occurredAt: p.hs_timestamp ? new Date(p.hs_timestamp) : null,
@@ -199,6 +202,53 @@ export async function syncActivities(teamId: string): Promise<number> {
   }
 
   return count;
+}
+
+// ---------------------------------------------------------------------------
+// Compute and store health scores for all deals
+// ---------------------------------------------------------------------------
+async function computeAndStoreHealthScores(teamId: string): Promise<number> {
+  const deals = await db
+    .select()
+    .from(crmDeals)
+    .where(eq(crmDeals.teamId, teamId));
+
+  const activities = await db
+    .select()
+    .from(crmActivities)
+    .where(eq(crmActivities.teamId, teamId));
+
+  let scored = 0;
+  for (const deal of deals) {
+    const dealActs = activities.filter(
+      (a) => a.dealHubspotId === deal.hubspotDealId
+    );
+    const result = dealHealthScore(
+      {
+        hubspotDealId: deal.hubspotDealId,
+        dealName: deal.dealName,
+        amount: deal.amount,
+        stage: deal.stage,
+        daysInStage: deal.daysInStage,
+        closeDate: deal.closeDate,
+      },
+      dealActs.map((a) => ({
+        type: a.type,
+        dealHubspotId: a.dealHubspotId,
+        contactHubspotId: a.contactHubspotId,
+        occurredAt: a.occurredAt,
+      }))
+    );
+
+    await db
+      .update(crmDeals)
+      .set({ healthScore: result.score })
+      .where(eq(crmDeals.id, deal.id));
+
+    scored++;
+  }
+
+  return scored;
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +375,10 @@ export async function runFullSync(teamId: string): Promise<SyncResult> {
 
     const activitiesCount = await syncActivities(teamId);
     console.log(`[CRM Sync] Synced ${activitiesCount} activities`);
+
+    // Compute health scores for all deals
+    const healthScoresComputed = await computeAndStoreHealthScores(teamId);
+    console.log(`[CRM Sync] Computed health scores for ${healthScoresComputed} deals`);
 
     // Feed into knowledge engine
     let knowledgeUpdated = false;
