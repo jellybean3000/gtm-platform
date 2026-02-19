@@ -210,6 +210,26 @@ export const orchestrations = pgTable("orchestrations", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const hubspotConnections = pgTable(
+  "hubspot_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id)
+      .unique(),
+    portalId: varchar("portal_id", { length: 50 }),
+    hubName: varchar("hub_name", { length: 255 }),
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    scopes: text("scopes").array(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("hubspot_connections_team_id_idx").on(table.teamId)]
+);
+
 export const intelligenceProducts = pgTable("intelligence_products", {
   id: uuid("id").primaryKey().defaultRandom(),
   teamId: uuid("team_id")
