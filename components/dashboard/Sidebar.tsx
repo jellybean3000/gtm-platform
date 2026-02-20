@@ -11,6 +11,12 @@ const mainNav = [
   { name: "Orchestrator", href: "/orchestrator", icon: "🎯" },
 ];
 
+const utilityNav = [
+  { name: "Guide", href: "/guide" },
+  { name: "Settings", href: "/settings" },
+  { name: "FAQ", href: "/faq" },
+];
+
 const agents = [
   { name: "Market Research", slug: "market-research", icon: "🔍", color: "#0EA5E9" },
   { name: "PMF", slug: "pmf", icon: "🎯", color: "#14B8A6" },
@@ -102,6 +108,25 @@ export function Sidebar() {
           </div>
         </div>
       </nav>
+
+      <div className="px-3 py-2 border-t border-border-default">
+        {utilityNav.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`block px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                isActive
+                  ? "text-text-body bg-white/5"
+                  : "text-text-dim hover:text-text-body hover:bg-white/5"
+              }`}
+            >
+              {item.name}
+            </Link>
+          );
+        })}
+      </div>
 
       <div className="p-4 border-t border-border-default">
         <UserButton
