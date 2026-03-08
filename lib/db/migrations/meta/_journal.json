@@ -22,6 +22,13 @@
       "when": 1771514315851,
       "tag": "0002_dashing_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772990757257,
+      "tag": "0003_busy_greymalkin",
+      "breakpoints": true
     }
   ]
 }
