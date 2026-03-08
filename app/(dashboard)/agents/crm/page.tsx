@@ -54,44 +54,48 @@ export default function CRMPage() {
             : "Track and manage your investor pipeline for fundraising."}
         </p>
 
-        {/* Mode Switcher — inline */}
+        {/* Mode Switcher */}
         <div
-          className="inline-flex rounded-full p-1 gap-1"
           style={{
+            display: "flex",
+            gap: "4px",
+            padding: "4px",
+            borderRadius: "9999px",
             background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.12)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            width: "fit-content",
           }}
         >
           <button
             onClick={() => handleModeChange("customers")}
-            className="px-5 py-1.5 rounded-full text-sm font-semibold font-display transition-all"
             style={{
+              padding: "6px 20px",
+              borderRadius: "9999px",
+              fontSize: "14px",
+              fontWeight: 600,
               background:
-                mode === "customers" ? CUSTOMER_COLOR : "transparent",
+                mode === "customers" ? "#F97316" : "transparent",
               color: mode === "customers" ? "#FFFFFF" : "#A1A1AA",
               cursor: "pointer",
               border: "none",
-              boxShadow:
-                mode === "customers"
-                  ? `0 0 12px ${CUSTOMER_COLOR}50`
-                  : "none",
+              outline: "none",
             }}
           >
             Customers
           </button>
           <button
             onClick={() => handleModeChange("investors")}
-            className="px-5 py-1.5 rounded-full text-sm font-semibold font-display transition-all"
             style={{
+              padding: "6px 20px",
+              borderRadius: "9999px",
+              fontSize: "14px",
+              fontWeight: 600,
               background:
-                mode === "investors" ? INVESTOR_COLOR : "transparent",
+                mode === "investors" ? "#8B5CF6" : "transparent",
               color: mode === "investors" ? "#FFFFFF" : "#A1A1AA",
               cursor: "pointer",
               border: "none",
-              boxShadow:
-                mode === "investors"
-                  ? `0 0 12px ${INVESTOR_COLOR}50`
-                  : "none",
+              outline: "none",
             }}
           >
             Investors
