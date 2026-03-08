@@ -31,20 +31,18 @@ export default function CRMPage() {
     <div className="max-w-7xl mx-auto px-10 py-8">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: accent }} />
-            <h1 className="text-2xl font-bold text-text-heading font-display">
-              CRM Intelligence
-            </h1>
-          </div>
-          <ModeSwitcher mode={mode} onChange={handleModeChange} />
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: accent }} />
+          <h1 className="text-2xl font-bold text-text-heading font-display">
+            CRM Intelligence
+          </h1>
         </div>
-        <p className="text-text-secondary text-sm">
+        <p className="text-text-secondary text-sm mb-4">
           {mode === "customers"
             ? "Deal health scoring, ICP matching, and AI-powered pipeline analysis powered by HubSpot data."
             : "Track and manage your investor pipeline for fundraising."}
         </p>
+        <ModeSwitcher mode={mode} onChange={handleModeChange} />
       </div>
 
       {/* Mode content */}
