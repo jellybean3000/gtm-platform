@@ -341,6 +341,92 @@ export const crmSyncLog = pgTable(
   (table) => [index("crm_sync_log_team_id_idx").on(table.teamId)]
 );
 
+// ---------------------------------------------------------------------------
+// Investor CRM Tables
+// ---------------------------------------------------------------------------
+
+export const investorFirmTypeEnum = pgEnum("investor_firm_type", [
+  "vc",
+  "angel",
+  "pe",
+  "corporate",
+  "family_office",
+  "other",
+]);
+
+export const investorStageEnum = pgEnum("investor_stage", [
+  "identified",
+  "researching",
+  "outreach",
+  "first_meeting",
+  "partner_meeting",
+  "due_diligence",
+  "term_sheet",
+  "closed_committed",
+  "passed",
+]);
+
+export const investorInterestEnum = pgEnum("investor_interest", [
+  "high",
+  "medium",
+  "low",
+  "unknown",
+]);
+
+export const investors = pgTable(
+  "investors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id),
+    firmName: varchar("firm_name", { length: 255 }).notNull(),
+    firmType: investorFirmTypeEnum("firm_type").notNull().default("vc"),
+    checkSizeMin: integer("check_size_min"),
+    checkSizeMax: integer("check_size_max"),
+    stage: investorStageEnum("stage").notNull().default("identified"),
+    leadPartner: varchar("lead_partner", { length: 255 }),
+    leadPartnerEmail: varchar("lead_partner_email", { length: 255 }),
+    interestLevel: investorInterestEnum("interest_level")
+      .notNull()
+      .default("unknown"),
+    committedAmount: integer("committed_amount"),
+    thesisFit: text("thesis_fit"),
+    portfolioCompanies: text("portfolio_companies").array(),
+    website: text("website"),
+    notes: text("notes"),
+    nextSteps: text("next_steps"),
+    lastContactDate: timestamp("last_contact_date"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("investors_team_id_idx").on(table.teamId)]
+);
+
+export const investorMeetings = pgTable(
+  "investor_meetings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    investorId: uuid("investor_id")
+      .notNull()
+      .references(() => investors.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id),
+    meetingDate: timestamp("meeting_date").notNull(),
+    meetingType: varchar("meeting_type", { length: 50 }).notNull(),
+    attendees: text("attendees"),
+    notes: text("notes"),
+    nextSteps: text("next_steps"),
+    sentiment: varchar("sentiment", { length: 20 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("investor_meetings_investor_id_idx").on(table.investorId),
+    index("investor_meetings_team_id_idx").on(table.teamId),
+  ]
+);
+
 export const intelligenceProducts = pgTable("intelligence_products", {
   id: uuid("id").primaryKey().defaultRandom(),
   teamId: uuid("team_id")
