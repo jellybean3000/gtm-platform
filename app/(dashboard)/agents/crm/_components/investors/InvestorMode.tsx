@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 const ACCENT = "#8B5CF6";
 
@@ -160,6 +161,11 @@ export default function InvestorMode() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
+  // Import
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<Record<string, string>[] | null>(null);
+  const [importing, setImporting] = useState(false);
+
   // -------------------------------------------------------------------------
   // Data fetching
   // -------------------------------------------------------------------------
@@ -314,6 +320,183 @@ export default function InvestorMode() {
   };
 
   // -------------------------------------------------------------------------
+  // XLSX Import
+  // -------------------------------------------------------------------------
+  const COLUMN_MAP: Record<string, string> = {
+    // firmName
+    "firm": "firmName", "firm name": "firmName", "fund": "firmName", "fund name": "firmName",
+    "investor": "firmName", "investor name": "firmName", "name": "firmName", "company": "firmName",
+    // firmType
+    "type": "firmType", "firm type": "firmType", "fund type": "firmType", "investor type": "firmType",
+    // checkSizeMin
+    "check size min": "checkSizeMin", "min check": "checkSizeMin", "check min": "checkSizeMin",
+    "minimum check": "checkSizeMin", "min investment": "checkSizeMin",
+    // checkSizeMax
+    "check size max": "checkSizeMax", "max check": "checkSizeMax", "check max": "checkSizeMax",
+    "maximum check": "checkSizeMax", "max investment": "checkSizeMax", "check size": "checkSizeMax",
+    // stage
+    "stage": "stage", "status": "stage", "pipeline stage": "stage", "deal stage": "stage",
+    // leadPartner
+    "lead partner": "leadPartner", "partner": "leadPartner", "contact": "leadPartner",
+    "contact name": "leadPartner", "lead": "leadPartner", "gp": "leadPartner",
+    // leadPartnerEmail
+    "email": "leadPartnerEmail", "partner email": "leadPartnerEmail", "contact email": "leadPartnerEmail",
+    // interestLevel
+    "interest": "interestLevel", "interest level": "interestLevel",
+    // committedAmount
+    "committed": "committedAmount", "committed amount": "committedAmount", "amount committed": "committedAmount",
+    "commitment": "committedAmount", "amount": "committedAmount",
+    // thesisFit
+    "thesis fit": "thesisFit", "thesis": "thesisFit", "fit": "thesisFit",
+    // portfolioCompanies
+    "portfolio": "portfolioCompanies", "portfolio companies": "portfolioCompanies",
+    // website
+    "website": "website", "url": "website", "site": "website",
+    // notes
+    "notes": "notes", "note": "notes", "comments": "notes", "comment": "notes",
+    // nextSteps
+    "next steps": "nextSteps", "next step": "nextSteps", "action items": "nextSteps",
+  };
+
+  const STAGE_ALIASES: Record<string, string> = {
+    "identified": "identified", "new": "identified", "prospect": "identified",
+    "researching": "researching", "research": "researching",
+    "outreach": "outreach", "contacted": "outreach", "reaching out": "outreach",
+    "first meeting": "first_meeting", "first_meeting": "first_meeting", "intro": "first_meeting", "intro meeting": "first_meeting",
+    "partner meeting": "partner_meeting", "partner_meeting": "partner_meeting", "partners": "partner_meeting",
+    "due diligence": "due_diligence", "due_diligence": "due_diligence", "dd": "due_diligence", "diligence": "due_diligence",
+    "term sheet": "term_sheet", "term_sheet": "term_sheet", "terms": "term_sheet",
+    "closed": "closed_committed", "committed": "closed_committed", "closed_committed": "closed_committed", "closed/committed": "closed_committed",
+    "passed": "passed", "pass": "passed", "declined": "passed", "dead": "passed",
+  };
+
+  const INTEREST_ALIASES: Record<string, Investor["interestLevel"]> = {
+    "high": "high", "very interested": "high", "strong": "high", "hot": "high",
+    "medium": "medium", "moderate": "medium", "warm": "medium", "interested": "medium",
+    "low": "low", "cold": "low", "not interested": "low",
+    "unknown": "unknown", "": "unknown", "tbd": "unknown",
+  };
+
+  const TYPE_ALIASES: Record<string, Investor["firmType"]> = {
+    "vc": "vc", "venture": "vc", "venture capital": "vc",
+    "angel": "angel", "angels": "angel",
+    "pe": "pe", "private equity": "pe",
+    "corporate": "corporate", "cvc": "corporate", "strategic": "corporate",
+    "family office": "family_office", "family_office": "family_office", "fo": "family_office",
+    "other": "other",
+  };
+
+  const parseNumber = (val: unknown): number | null => {
+    if (val === null || val === undefined || val === "") return null;
+    const str = String(val).replace(/[$,\s]/g, "");
+    const num = Number(str);
+    return isNaN(num) ? null : Math.round(num);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: "array" });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: "" });
+
+        if (rows.length === 0) {
+          toast.error("Spreadsheet is empty");
+          return;
+        }
+
+        setImportPreview(rows);
+      } catch {
+        toast.error("Failed to parse spreadsheet");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    // Reset so same file can be re-selected
+    e.target.value = "";
+  };
+
+  const handleImport = async () => {
+    if (!importPreview || importPreview.length === 0) return;
+    setImporting(true);
+
+    // Detect column mapping from headers
+    const headers = Object.keys(importPreview[0]);
+    const mapping: Record<string, string> = {};
+    for (const header of headers) {
+      const normalized = header.toLowerCase().trim();
+      if (COLUMN_MAP[normalized]) {
+        mapping[header] = COLUMN_MAP[normalized];
+      }
+    }
+
+    // Must have at least a firm name column
+    const firmNameCol = headers.find((h) => mapping[h] === "firmName");
+    if (!firmNameCol) {
+      toast.error("Could not find a firm/investor name column. Expected: Firm, Fund Name, Investor, Company, or Name");
+      setImporting(false);
+      return;
+    }
+
+    let created = 0;
+    let failed = 0;
+
+    for (const row of importPreview) {
+      const firmName = String(row[firmNameCol] || "").trim();
+      if (!firmName) continue;
+
+      const getVal = (field: string) => {
+        const col = headers.find((h) => mapping[h] === field);
+        return col ? String(row[col] || "").trim() : "";
+      };
+
+      const stageRaw = getVal("stage").toLowerCase();
+      const interestRaw = getVal("interestLevel").toLowerCase();
+      const typeRaw = getVal("firmType").toLowerCase();
+
+      const payload = {
+        firmName,
+        firmType: TYPE_ALIASES[typeRaw] || "vc",
+        checkSizeMin: parseNumber(getVal("checkSizeMin")),
+        checkSizeMax: parseNumber(getVal("checkSizeMax")),
+        stage: STAGE_ALIASES[stageRaw] || "identified",
+        leadPartner: getVal("leadPartner") || null,
+        leadPartnerEmail: getVal("leadPartnerEmail") || null,
+        interestLevel: INTEREST_ALIASES[interestRaw] || "unknown",
+        committedAmount: parseNumber(getVal("committedAmount")),
+        thesisFit: getVal("thesisFit") || null,
+        portfolioCompanies: getVal("portfolioCompanies")
+          ? getVal("portfolioCompanies").split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
+        website: getVal("website") || null,
+        notes: getVal("notes") || null,
+        nextSteps: getVal("nextSteps") || null,
+      };
+
+      try {
+        const res = await fetch("/api/crm/investors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) created++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    toast.success(`Imported ${created} investors${failed > 0 ? `, ${failed} failed` : ""}`);
+    setImportPreview(null);
+    setImporting(false);
+    fetchInvestors();
+  };
+
+  // -------------------------------------------------------------------------
   // Group investors by stage for kanban
   // -------------------------------------------------------------------------
   const stageGroups: Record<string, Investor[]> = {};
@@ -357,8 +540,27 @@ export default function InvestorMode() {
         <KPICard label="Avg Days in Stage" value={String(stats?.avgDaysInStage || 0)} />
       </div>
 
-      {/* Add investor button */}
-      <div className="flex justify-end mb-4">
+      {/* Action buttons */}
+      <div className="flex justify-end gap-2 mb-4">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.csv,.xls"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="rounded-lg px-4 py-2 text-sm font-semibold font-display border"
+          style={{
+            borderColor: `${ACCENT}40`,
+            color: ACCENT,
+            background: `${ACCENT}10`,
+            cursor: "pointer",
+          }}
+        >
+          Import Spreadsheet
+        </button>
         <button
           onClick={openAddModal}
           className="text-white rounded-lg px-4 py-2 text-sm font-semibold font-display"
@@ -882,6 +1084,85 @@ export default function InvestorMode() {
                 style={{ backgroundColor: ACCENT, cursor: saving ? "not-allowed" : "pointer" }}
               >
                 {saving ? "Saving..." : editingInvestor ? "Update" : "Add Investor"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Import Preview Modal */}
+      {importPreview && (
+        <>
+          <div
+            className="fixed inset-0 z-50"
+            style={{ background: "rgba(0,0,0,0.6)" }}
+            onClick={() => setImportPreview(null)}
+          />
+          <div
+            className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[85vh] overflow-y-auto border border-border-default rounded-card p-6"
+            style={{ background: "#09090B" }}
+          >
+            <h2 className="text-lg font-bold text-foreground font-display mb-2">
+              Import Preview
+            </h2>
+            <p className="text-text-dim text-sm mb-4">
+              Found <span className="text-foreground font-semibold">{importPreview.length}</span> rows.
+              Columns detected: <span className="font-mono text-text-body">{Object.keys(importPreview[0]).join(", ")}</span>
+            </p>
+
+            {/* Preview table */}
+            <div className="overflow-x-auto border border-border-default rounded-lg mb-4">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ background: "rgba(255,255,255,0.04)" }}>
+                    {Object.keys(importPreview[0]).slice(0, 6).map((col) => (
+                      <th key={col} className="text-left px-3 py-2 text-text-muted font-mono font-normal whitespace-nowrap">
+                        {col}
+                      </th>
+                    ))}
+                    {Object.keys(importPreview[0]).length > 6 && (
+                      <th className="text-left px-3 py-2 text-text-dim font-mono font-normal">
+                        +{Object.keys(importPreview[0]).length - 6} more
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.slice(0, 5).map((row, i) => (
+                    <tr key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                      {Object.keys(importPreview[0]).slice(0, 6).map((col) => (
+                        <td key={col} className="px-3 py-2 text-text-body whitespace-nowrap max-w-[150px] truncate">
+                          {String(row[col] || "—")}
+                        </td>
+                      ))}
+                      {Object.keys(importPreview[0]).length > 6 && (
+                        <td className="px-3 py-2 text-text-dim">...</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {importPreview.length > 5 && (
+                <div className="px-3 py-2 text-text-dim text-[10px] font-mono" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                  ...and {importPreview.length - 5} more rows
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setImportPreview(null)}
+                className="flex-1 py-2.5 rounded-lg border border-border-default text-text-body text-sm font-display cursor-pointer bg-transparent"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={importing}
+                className="flex-1 py-2.5 rounded-lg text-white text-sm font-semibold font-display disabled:opacity-50"
+                style={{ backgroundColor: ACCENT, cursor: importing ? "not-allowed" : "pointer" }}
+              >
+                {importing ? "Importing..." : `Import ${importPreview.length} Investors`}
               </button>
             </div>
           </div>
