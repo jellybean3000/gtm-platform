@@ -326,6 +326,7 @@ export default function InvestorMode() {
     // firmName
     "firm": "firmName", "firm name": "firmName", "fund": "firmName", "fund name": "firmName",
     "investor": "firmName", "investor name": "firmName", "name": "firmName", "company": "firmName",
+    "company (link to site)": "firmName", "company name": "firmName", "fund/firm": "firmName",
     // firmType
     "type": "firmType", "firm type": "firmType", "fund type": "firmType", "investor type": "firmType",
     // checkSizeMin
@@ -339,8 +340,10 @@ export default function InvestorMode() {
     // leadPartner
     "lead partner": "leadPartner", "partner": "leadPartner", "contact": "leadPartner",
     "contact name": "leadPartner", "lead": "leadPartner", "gp": "leadPartner",
+    "contact name (linkedin)": "leadPartner", "contact person": "leadPartner",
     // leadPartnerEmail
     "email": "leadPartnerEmail", "partner email": "leadPartnerEmail", "contact email": "leadPartnerEmail",
+    "email:": "leadPartnerEmail",
     // interestLevel
     "interest": "interestLevel", "interest level": "interestLevel",
     // committedAmount
@@ -353,9 +356,12 @@ export default function InvestorMode() {
     // website
     "website": "website", "url": "website", "site": "website",
     // notes
-    "notes": "notes", "note": "notes", "comments": "notes", "comment": "notes",
+    "notes": "notes", "note": "notes", "comments": "notes", "comment": "notes", "notes:": "notes",
     // nextSteps
     "next steps": "nextSteps", "next step": "nextSteps", "action items": "nextSteps",
+    "next action": "nextSteps", "next action:": "nextSteps", "action": "nextSteps",
+    // city (store in notes as extra context)
+    "city": "_city", "city:": "_city", "location": "_city",
   };
 
   const STAGE_ALIASES: Record<string, string> = {
@@ -393,6 +399,22 @@ export default function InvestorMode() {
     return isNaN(num) ? null : Math.round(num);
   };
 
+  // Keywords that indicate a real header row
+  const HEADER_KEYWORDS = [
+    "company", "firm", "fund", "investor", "name", "email", "partner",
+    "contact", "stage", "status", "notes", "next action", "check size",
+    "amount", "website", "city", "interest", "type",
+  ];
+
+  const isHeaderRow = (values: string[]): boolean => {
+    const normalized = values.map((v) => String(v).toLowerCase().trim());
+    let matches = 0;
+    for (const kw of HEADER_KEYWORDS) {
+      if (normalized.some((v) => v.includes(kw))) matches++;
+    }
+    return matches >= 2; // at least 2 recognizable column names
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -403,20 +425,62 @@ export default function InvestorMode() {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: "array" });
         const sheet = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: "" });
 
-        if (rows.length === 0) {
-          toast.error("Spreadsheet is empty");
+        // Parse as raw array of arrays to find the real header row
+        const rawRows = XLSX.utils.sheet_to_json<string[]>(sheet, {
+          header: 1,
+          defval: "",
+        });
+
+        // Scan for the header row (first row with 2+ recognizable column names)
+        let headerIdx = 0;
+        for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
+          const row = rawRows[i];
+          if (Array.isArray(row) && isHeaderRow(row.map(String))) {
+            headerIdx = i;
+            break;
+          }
+        }
+
+        // Extract headers from the detected row
+        const headerRow = rawRows[headerIdx].map((v) =>
+          String(v).trim().replace(/:$/, "").trim()
+        );
+
+        // Build data rows from everything after the header
+        const dataRows: Record<string, string>[] = [];
+        for (let i = headerIdx + 1; i < rawRows.length; i++) {
+          const raw = rawRows[i];
+          if (!Array.isArray(raw)) continue;
+          // Skip empty rows
+          const hasData = raw.some((cell) => String(cell).trim() !== "");
+          if (!hasData) continue;
+
+          const obj: Record<string, string> = {};
+          for (let c = 0; c < headerRow.length; c++) {
+            const colName = headerRow[c] || `col_${c}`;
+            obj[colName] = String(raw[c] ?? "").trim();
+          }
+          dataRows.push(obj);
+        }
+
+        // Filter to rows that have a non-empty value in the first column (firm name)
+        const firmCol = headerRow[0];
+        const filtered = dataRows.filter(
+          (row) => row[firmCol] && row[firmCol] !== "—" && row[firmCol] !== "-"
+        );
+
+        if (filtered.length === 0) {
+          toast.error("No investor data found in spreadsheet");
           return;
         }
 
-        setImportPreview(rows);
+        setImportPreview(filtered);
       } catch {
         toast.error("Failed to parse spreadsheet");
       }
     };
     reader.readAsArrayBuffer(file);
-    // Reset so same file can be re-selected
     e.target.value = "";
   };
 
@@ -424,22 +488,30 @@ export default function InvestorMode() {
     if (!importPreview || importPreview.length === 0) return;
     setImporting(true);
 
-    // Detect column mapping from headers
+    // Detect column mapping from headers — try exact match then partial match
     const headers = Object.keys(importPreview[0]);
     const mapping: Record<string, string> = {};
     for (const header of headers) {
-      const normalized = header.toLowerCase().trim();
+      const normalized = header.toLowerCase().trim().replace(/:$/, "").trim();
+      // Exact match first
       if (COLUMN_MAP[normalized]) {
         mapping[header] = COLUMN_MAP[normalized];
+        continue;
+      }
+      // Partial match: check if any COLUMN_MAP key is contained in the header
+      for (const [key, field] of Object.entries(COLUMN_MAP)) {
+        if (normalized.includes(key) || key.includes(normalized)) {
+          mapping[header] = field;
+          break;
+        }
       }
     }
 
-    // Must have at least a firm name column
-    const firmNameCol = headers.find((h) => mapping[h] === "firmName");
+    // If no firmName mapped, use the first column
+    let firmNameCol = headers.find((h) => mapping[h] === "firmName");
     if (!firmNameCol) {
-      toast.error("Could not find a firm/investor name column. Expected: Firm, Fund Name, Investor, Company, or Name");
-      setImporting(false);
-      return;
+      firmNameCol = headers[0];
+      mapping[firmNameCol] = "firmName";
     }
 
     let created = 0;
@@ -458,6 +530,19 @@ export default function InvestorMode() {
       const interestRaw = getVal("interestLevel").toLowerCase();
       const typeRaw = getVal("firmType").toLowerCase();
 
+      // Build notes from mapped notes + city + any unmapped columns with data
+      const noteParts: string[] = [];
+      const city = getVal("_city");
+      if (city) noteParts.push(`City: ${city}`);
+      const mappedNotes = getVal("notes");
+      if (mappedNotes) noteParts.push(mappedNotes);
+      // Include unmapped columns with data as extra context
+      for (const h of headers) {
+        if (!mapping[h] && row[h] && String(row[h]).trim()) {
+          noteParts.push(`${h}: ${String(row[h]).trim()}`);
+        }
+      }
+
       const payload = {
         firmName,
         firmType: TYPE_ALIASES[typeRaw] || "vc",
@@ -473,7 +558,7 @@ export default function InvestorMode() {
           ? getVal("portfolioCompanies").split(",").map((s) => s.trim()).filter(Boolean)
           : [],
         website: getVal("website") || null,
-        notes: getVal("notes") || null,
+        notes: noteParts.length > 0 ? noteParts.join("\n") : null,
         nextSteps: getVal("nextSteps") || null,
       };
 
