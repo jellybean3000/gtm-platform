@@ -337,20 +337,29 @@ export default function InvestorMode() {
     "maximum check": "checkSizeMax", "max investment": "checkSizeMax", "check size": "checkSizeMax",
     // stage
     "stage": "stage", "status": "stage", "pipeline stage": "stage", "deal stage": "stage",
-    // leadPartner
-    "lead partner": "leadPartner", "partner": "leadPartner", "contact": "leadPartner",
+    // leadPartner — primary contact
+    "lead partner": "leadPartner", "partner": "leadPartner",
     "contact name": "leadPartner", "lead": "leadPartner", "gp": "leadPartner",
     "contact name (linkedin)": "leadPartner", "contact person": "leadPartner",
+    "li contact #1 name": "leadPartner", "contact #1 name": "leadPartner",
+    "contact 1 name": "leadPartner", "primary contact": "leadPartner",
     // leadPartnerEmail
     "email": "leadPartnerEmail", "partner email": "leadPartnerEmail", "contact email": "leadPartnerEmail",
-    "email:": "leadPartnerEmail",
+    "email:": "leadPartnerEmail", "li contact #1 email": "leadPartnerEmail",
+    "contact #1 email": "leadPartnerEmail", "contact 1 email": "leadPartnerEmail",
+    // secondary contact (store in notes)
+    "li contact #2 name": "_contact2Name", "contact #2 name": "_contact2Name",
+    "li contact #2 email": "_contact2Email", "contact #2 email": "_contact2Email",
     // interestLevel
     "interest": "interestLevel", "interest level": "interestLevel",
     // committedAmount
     "committed": "committedAmount", "committed amount": "committedAmount", "amount committed": "committedAmount",
-    "commitment": "committedAmount", "amount": "committedAmount",
-    // thesisFit
-    "thesis fit": "thesisFit", "thesis": "thesisFit", "fit": "thesisFit",
+    "commitment": "committedAmount",
+    // thesisFit / description
+    "thesis fit": "thesisFit", "thesis": "thesisFit",
+    "description": "thesisFit", "fund description": "thesisFit",
+    // focus areas
+    "focus": "_focus", "investment focus": "_focus", "sector": "_focus", "sectors": "_focus",
     // portfolioCompanies
     "portfolio": "portfolioCompanies", "portfolio companies": "portfolioCompanies",
     // website
@@ -359,9 +368,15 @@ export default function InvestorMode() {
     "notes": "notes", "note": "notes", "comments": "notes", "comment": "notes", "notes:": "notes",
     // nextSteps
     "next steps": "nextSteps", "next step": "nextSteps", "action items": "nextSteps",
-    "next action": "nextSteps", "next action:": "nextSteps", "action": "nextSteps",
-    // city (store in notes as extra context)
+    "next action": "nextSteps", "next action:": "nextSteps",
+    // location fields (combine into notes)
     "city": "_city", "city:": "_city", "location": "_city",
+    "state": "_state", "country": "_country", "msa": "_msa", "csa": "_csa",
+    // metrics (store in notes)
+    "total_investments": "_totalInvestments", "total investments": "_totalInvestments",
+    "total_rounds": "_totalRounds", "total rounds": "_totalRounds",
+    // emailed flags (skip)
+    "emailed-1?": "_skip", "emailed-2?": "_skip", "emailed 1": "_skip", "emailed 2": "_skip",
   };
 
   const STAGE_ALIASES: Record<string, string> = {
@@ -385,10 +400,11 @@ export default function InvestorMode() {
 
   const TYPE_ALIASES: Record<string, Investor["firmType"]> = {
     "vc": "vc", "venture": "vc", "venture capital": "vc",
-    "angel": "angel", "angels": "angel",
+    "angel": "angel", "angels": "angel", "angel investor": "angel", "angel group": "angel",
     "pe": "pe", "private equity": "pe",
-    "corporate": "corporate", "cvc": "corporate", "strategic": "corporate",
+    "corporate": "corporate", "cvc": "corporate", "strategic": "corporate", "corporate venture": "corporate",
     "family office": "family_office", "family_office": "family_office", "fo": "family_office",
+    "accelerator": "other", "incubator": "other", "government": "other", "grant": "other",
     "other": "other",
   };
 
@@ -530,15 +546,51 @@ export default function InvestorMode() {
       const interestRaw = getVal("interestLevel").toLowerCase();
       const typeRaw = getVal("firmType").toLowerCase();
 
-      // Build notes from mapped notes + city + any unmapped columns with data
+      // Build notes from mapped notes + location + metrics + extra columns
       const noteParts: string[] = [];
+
+      // Location
       const city = getVal("_city");
-      if (city) noteParts.push(`City: ${city}`);
+      const state = getVal("_state");
+      const country = getVal("_country");
+      const locationParts = [city, state, country].filter(Boolean);
+      if (locationParts.length > 0) noteParts.push(`Location: ${locationParts.join(", ")}`);
+
+      // Focus / sectors
+      const focus = getVal("_focus");
+      if (focus) noteParts.push(`Focus: ${focus}`);
+
+      // Collect sector columns (Biotech, Digital Health, etc.) that have values
+      const sectorCols: string[] = [];
+      for (const h of headers) {
+        const val = String(row[h] || "").trim();
+        // Sector columns typically have numeric values (1, 19, etc.) indicating activity
+        if (!mapping[h] && val && val !== "0" && /^\d+$/.test(val)) {
+          sectorCols.push(`${h} (${val})`);
+        }
+      }
+      if (sectorCols.length > 0) noteParts.push(`Sectors: ${sectorCols.join(", ")}`);
+
+      // Investment metrics
+      const totalInv = getVal("_totalInvestments");
+      const totalRounds = getVal("_totalRounds");
+      if (totalInv) noteParts.push(`Total investments: ${totalInv}`);
+      if (totalRounds) noteParts.push(`Total rounds: ${totalRounds}`);
+
+      // Secondary contact
+      const contact2Name = getVal("_contact2Name");
+      const contact2Email = getVal("_contact2Email");
+      if (contact2Name || contact2Email) {
+        noteParts.push(`Contact #2: ${[contact2Name, contact2Email].filter(Boolean).join(" — ")}`);
+      }
+
+      // Mapped notes
       const mappedNotes = getVal("notes");
       if (mappedNotes) noteParts.push(mappedNotes);
-      // Include unmapped columns with data as extra context
+
+      // Include remaining unmapped text columns with data
       for (const h of headers) {
-        if (!mapping[h] && row[h] && String(row[h]).trim()) {
+        if (!mapping[h] && row[h] && String(row[h]).trim() && !/^\d+$/.test(String(row[h]).trim())) {
           noteParts.push(`${h}: ${String(row[h]).trim()}`);
         }
       }
@@ -553,7 +605,7 @@ export default function InvestorMode() {
         leadPartnerEmail: getVal("leadPartnerEmail") || null,
         interestLevel: INTEREST_ALIASES[interestRaw] || "unknown",
         committedAmount: parseNumber(getVal("committedAmount")),
-        thesisFit: getVal("thesisFit") || null,
+        thesisFit: [getVal("thesisFit"), focus ? `Focus: ${focus}` : ""].filter(Boolean).join(". ") || null,
         portfolioCompanies: getVal("portfolioCompanies")
           ? getVal("portfolioCompanies").split(",").map((s) => s.trim()).filter(Boolean)
           : [],
