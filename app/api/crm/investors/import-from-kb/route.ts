@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { documents, investors } from "@/lib/db/schema";
 import { getSupabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase/storage";
@@ -118,12 +118,7 @@ export async function GET() {
       status: documents.status,
       createdAt: documents.createdAt,
     })
-    .from(documents)
-    .where(
-      and(
-        eq(documents.teamId, TEAM_ID),
-      )
-    );
+    .from(documents);
 
   const spreadsheets = docs.filter(
     (d) =>
@@ -147,6 +142,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  try {
   const body = await request.json();
   const { documentId } = body;
 
@@ -161,7 +157,7 @@ export async function POST(request: Request) {
   const [doc] = await db
     .select()
     .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.teamId, TEAM_ID)));
+    .where(eq(documents.id, documentId));
 
   if (!doc) {
     return NextResponse.json(
@@ -381,4 +377,11 @@ export async function POST(request: Request) {
     total: filtered.length,
     documentName: doc.filename,
   });
+  } catch (error) {
+    console.error("KB import error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Import failed" },
+      { status: 500 }
+    );
+  }
 }

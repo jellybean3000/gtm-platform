@@ -676,11 +676,17 @@ export default function InvestorMode() {
         fetchInvestors();
         setShowKBModal(false);
       } else {
-        const err = await res.json();
-        toast.error(err.error || "Import failed");
+        let msg = "Import failed";
+        try {
+          const err = await res.json();
+          msg = err.error || msg;
+        } catch {
+          msg = `Import failed (${res.status})`;
+        }
+        toast.error(msg);
       }
-    } catch {
-      toast.error("Import failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Import failed");
     } finally {
       setImportingKB(null);
     }
