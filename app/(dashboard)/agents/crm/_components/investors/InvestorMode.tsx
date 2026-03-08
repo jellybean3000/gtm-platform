@@ -166,6 +166,12 @@ export default function InvestorMode() {
   const [importPreview, setImportPreview] = useState<Record<string, string>[] | null>(null);
   const [importing, setImporting] = useState(false);
 
+  // KB Import
+  const [showKBModal, setShowKBModal] = useState(false);
+  const [kbDocs, setKBDocs] = useState<{ id: string; filename: string; fileType: string; createdAt: string }[]>([]);
+  const [loadingKBDocs, setLoadingKBDocs] = useState(false);
+  const [importingKB, setImportingKB] = useState<string | null>(null);
+
   // -------------------------------------------------------------------------
   // Data fetching
   // -------------------------------------------------------------------------
@@ -634,6 +640,53 @@ export default function InvestorMode() {
   };
 
   // -------------------------------------------------------------------------
+  // KB Import
+  // -------------------------------------------------------------------------
+  const openKBImport = async () => {
+    setShowKBModal(true);
+    setLoadingKBDocs(true);
+    try {
+      const res = await fetch("/api/crm/investors/import-from-kb");
+      if (res.ok) {
+        const data = await res.json();
+        setKBDocs(data.documents || []);
+      }
+    } catch {
+      toast.error("Failed to load knowledge base documents");
+    } finally {
+      setLoadingKBDocs(false);
+    }
+  };
+
+  const importFromKB = async (docId: string) => {
+    setImportingKB(docId);
+    try {
+      const res = await fetch("/api/crm/investors/import-from-kb", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: docId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(
+          `Imported ${data.created} investors from "${data.documentName}"` +
+            (data.skipped ? `, ${data.skipped} duplicates skipped` : "") +
+            (data.failed ? `, ${data.failed} failed` : "")
+        );
+        fetchInvestors();
+        setShowKBModal(false);
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Import failed");
+      }
+    } catch {
+      toast.error("Import failed");
+    } finally {
+      setImportingKB(null);
+    }
+  };
+
+  // -------------------------------------------------------------------------
   // Group investors by stage for kanban
   // -------------------------------------------------------------------------
   const stageGroups: Record<string, Investor[]> = {};
@@ -686,6 +739,18 @@ export default function InvestorMode() {
           onChange={handleFileSelect}
           className="hidden"
         />
+        <button
+          onClick={openKBImport}
+          className="rounded-lg px-4 py-2 text-sm font-semibold font-display border"
+          style={{
+            borderColor: `${ACCENT}40`,
+            color: ACCENT,
+            background: `${ACCENT}10`,
+            cursor: "pointer",
+          }}
+        >
+          Import from KB
+        </button>
         <button
           onClick={() => fileInputRef.current?.click()}
           className="rounded-lg px-4 py-2 text-sm font-semibold font-display border"
@@ -1302,6 +1367,84 @@ export default function InvestorMode() {
                 {importing ? "Importing..." : `Import ${importPreview.length} Investors`}
               </button>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* KB Import Modal */}
+      {showKBModal && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/60"
+            onClick={() => setShowKBModal(false)}
+          />
+          <div
+            className="fixed z-50 bg-[#18181B] border border-white/10 rounded-2xl p-6 shadow-2xl"
+            style={{
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "min(520px, 90vw)",
+              maxHeight: "70vh",
+              overflow: "auto",
+            }}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-text-heading font-display">
+                Import from Knowledge Base
+              </h2>
+              <button
+                onClick={() => setShowKBModal(false)}
+                className="text-text-muted hover:text-text-primary text-xl"
+                style={{ cursor: "pointer", background: "none", border: "none" }}
+              >
+                ×
+              </button>
+            </div>
+
+            {loadingKBDocs ? (
+              <p className="text-text-dim font-mono text-sm text-center py-8">
+                Loading documents...
+              </p>
+            ) : kbDocs.length === 0 ? (
+              <p className="text-text-dim font-mono text-sm text-center py-8">
+                No spreadsheets found in Knowledge Base. Upload an XLSX or CSV file first.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-text-secondary text-sm mb-3">
+                  Select a spreadsheet to import into the investor pipeline:
+                </p>
+                {kbDocs.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-white/8 hover:border-white/15"
+                    style={{ background: "rgba(255,255,255,0.03)" }}
+                  >
+                    <div>
+                      <div className="text-sm font-semibold text-text-primary">
+                        {doc.filename}
+                      </div>
+                      <div className="text-xs text-text-dim font-mono">
+                        {doc.fileType.toUpperCase()} · {new Date(doc.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => importFromKB(doc.id)}
+                      disabled={importingKB !== null}
+                      className="text-white rounded-lg px-3 py-1.5 text-xs font-semibold"
+                      style={{
+                        backgroundColor: importingKB === doc.id ? `${ACCENT}80` : ACCENT,
+                        cursor: importingKB !== null ? "not-allowed" : "pointer",
+                        border: "none",
+                      }}
+                    >
+                      {importingKB === doc.id ? "Importing..." : "Import"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
